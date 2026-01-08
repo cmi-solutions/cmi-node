@@ -1,5 +1,5 @@
 {
-  "name": "cmi",
+  "name": "cmi-node",
   "version": "1.0.0",
   "description": "Framework-agnostic CMI Payment Gateway SDK with built-in security for Node.js",
   "main": "./dist/index.cjs",
