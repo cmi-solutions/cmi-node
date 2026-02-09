@@ -7,13 +7,13 @@
 
 import { PaymentRequest } from '@types';
 import { PaymentValidator } from '@validators';
-import { HashUtil, SanitizationUtil, FormatterUtil, GeneratorUtil } from '@utils';
+import { HashUtil, SanitizationUtil, FormatterUtil, GeneratorUtil, SecretString } from '@utils';
 import { normalizeLanguage } from '@constants';
 import { OPTIONAL_PAYMENT_FIELDS, STANDARD_PAYMENT_FIELDS } from '@constants/fields';
 
 export interface PaymentBuilderConfig {
     clientId: string;
-    storeKey: string;
+    storeKey: string | SecretString;
     storetype: string;
     trantype: string;
     shopUrl: string;

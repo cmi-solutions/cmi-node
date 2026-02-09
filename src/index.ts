@@ -1,10 +1,11 @@
-// Core exports
+// =============================================================================
+// PUBLIC API - Only these are accessible to developers using the package
+// =============================================================================
+
+// Core exports - ONLY high-level API
 export {
   CMIPaymentGateway,
   CallbackHandler,
-  PaymentBuilder,
-  FormGenerator,
-  CallbackVerifier,
 } from './core';
 
 // Type exports
@@ -20,23 +21,25 @@ export type {
   CMIPaymentGatewayOptions
 } from './types';
 
-// Constant exports
+// Constant exports (configuration values only - no security-related exports)
 export {
   SUPPORTED_CURRENCIES,
   SUPPORTED_LANGUAGES,
   SUPPORTED_STORE_TYPES,
-  // Field definitions
-  BILLING_FIELDS,
-  OPTIONAL_PAYMENT_FIELDS,
-  STANDARD_PAYMENT_FIELDS,
-  HASH_SANITIZE_FIELDS,
+  SUPPORTED_TRAN_TYPES,
+  SUPPORTED_CONFIRMATION_MODES,
 } from './constants';
 
-// Validator exports (optional, for advanced users)
-export { ConfigValidator, PaymentValidator } from './validators';
-
-// Utility exports (for advanced users)
-export { timingSafeCompare, sha512Base64 } from './utils/crypto';
+// =============================================================================
+// INTERNAL - The following are NOT exported to prevent misuse:
+// - CallbackVerifier: Hash verification logic (internal only)
+// - PaymentBuilder: Payment parameter building with hash (internal only)
+// - FormGenerator: Form generation (internal only)
+// - HashUtil: SHA-512 hash generation (internal only)  
+// - timingSafeCompare, sha512Base64: Crypto utilities (internal only)
+// - ConfigValidator, PaymentValidator: Validation logic (internal only)
+// - BILLING_FIELDS, HASH_SANITIZE_FIELDS, etc.: Internal field definitions
+// =============================================================================
 
 // Logger exports
 export { logger, configureLogger, resetLogger } from './logger';

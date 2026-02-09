@@ -1,10 +1,11 @@
 import crypto from "crypto";
 import { SanitizationUtil } from "@utils";
 import { HASH_SANITIZE_FIELDS } from "@constants/fields";
+import { SecretString } from "./secret-string.util";
 
 export class HashUtil {
 
-  static generate(params: Record<string, any>, storeKey: string): string {
+  static generate(params: Record<string, any>, storeKey: string | SecretString): string {
     try {
       const sortedKeys = Object.keys(params).sort((a, b) =>
         a.toLowerCase().localeCompare(b.toLowerCase())
@@ -14,7 +15,6 @@ export class HashUtil {
       const sanitizeFields: Set<string> = new Set(HASH_SANITIZE_FIELDS);
 
       let hashval = "";
-      const hashParts: string[] = []; // For debugging
 
       for (const key of sortedKeys) {
         const lowerKey = key.toLowerCase();
@@ -30,23 +30,23 @@ export class HashUtil {
             .replace(/\\/g, "\\\\")
             .replace(/\|/g, "\\|");
           hashval += escapedValue + "|";
-          hashParts.push(`${key}=${escapedValue}`);
         }
       }
 
-      const escapedStoreKey = storeKey
+      // Extract actual value if SecretString, otherwise use as-is
+      const keyValue = storeKey instanceof SecretString
+        ? storeKey.getValue()
+        : storeKey;
+
+      const escapedStoreKey = keyValue
         .replace(/\\/g, "\\\\")
         .replace(/\|/g, "\\|");
       hashval += escapedStoreKey;
-
-
 
       const calculatedHash = crypto
         .createHash("sha512")
         .update(hashval, "utf8")
         .digest("hex");
-
-
 
       return Buffer.from(calculatedHash, "hex").toString("base64");
     } catch (error) {
@@ -57,3 +57,4 @@ export class HashUtil {
   }
 
 }
+

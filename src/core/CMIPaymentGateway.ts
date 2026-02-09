@@ -9,6 +9,7 @@ import {
   CMIPaymentGatewayOptions,
 } from "@types";
 import { ConfigValidator } from "@validators";
+import { SecretString } from "@utils";
 import { CallbackHandler } from "./CallbackHandler";
 import { PaymentBuilder } from "./PaymentBuilder";
 import { FormGenerator } from "./FormGenerator";
@@ -46,6 +47,9 @@ export class CMIPaymentGateway {
   private readonly formGenerator: FormGenerator;
   private readonly callbackVerifier: CallbackVerifier;
 
+  // Secure storage for storeKey
+  private readonly secureStoreKey: SecretString;
+
   private callbackHandler: CallbackHandler | null = null;
   private middleware: CallbackMiddleware | null = null;
 
@@ -75,10 +79,13 @@ export class CMIPaymentGateway {
       confirmationMode: normalizedConfirmationMode,
     };
 
-    // Initialize extracted components
+    // Wrap storeKey in SecretString to prevent accidental exposure
+    this.secureStoreKey = new SecretString(config.storeKey);
+
+    // Initialize extracted components with SecretString
     this.paymentBuilder = new PaymentBuilder({
       clientId: this.config.clientId,
-      storeKey: this.config.storeKey,
+      storeKey: this.secureStoreKey,
       storetype: this.config.storetype,
       trantype: this.config.trantype,
       shopUrl: this.config.shopUrl,
@@ -88,7 +95,7 @@ export class CMIPaymentGateway {
     this.formGenerator = new FormGenerator(this.config.gatewayUrl);
 
     this.callbackVerifier = new CallbackVerifier({
-      storeKey: this.config.storeKey,
+      storeKey: this.secureStoreKey,
       confirmationMode: this.config.confirmationMode ?? 'manual',
     });
 
@@ -248,32 +255,14 @@ export class CMIPaymentGateway {
   }
 
   /**
-   * Get gateway configuration
+   * Get gateway configuration (sanitized - excludes storeKey for security)
    *
-   * @internal
+   * @returns Configuration object without sensitive data
    */
-  getConfig(): PaymentConfig {
-    return this.config as PaymentConfig;
+  getConfig(): Omit<PaymentConfig, 'storeKey'> {
+    const { storeKey: _storeKey, ...safeConfig } = this.config;
+    return safeConfig;
   }
 
-  /**
-   * Get PaymentBuilder instance for advanced usage
-   */
-  getPaymentBuilder(): PaymentBuilder {
-    return this.paymentBuilder;
-  }
 
-  /**
-   * Get FormGenerator instance for advanced usage
-   */
-  getFormGenerator(): FormGenerator {
-    return this.formGenerator;
-  }
-
-  /**
-   * Get CallbackVerifier instance for advanced usage
-   */
-  getCallbackVerifier(): CallbackVerifier {
-    return this.callbackVerifier;
-  }
 }

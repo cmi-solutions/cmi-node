@@ -11,34 +11,32 @@ import { SanitizationUtil } from '@utils';
  * Generates HTML payment forms for CMI gateway submission
  */
 export class FormGenerator {
-    private readonly gatewayUrl: string;
+  private readonly gatewayUrl: string;
 
-    constructor(gatewayUrl: string) {
-        this.gatewayUrl = gatewayUrl;
-    }
+  constructor(gatewayUrl: string) {
+    this.gatewayUrl = gatewayUrl;
+  }
 
-    /**
-     * Generate HTML form for payment submission
-     *
-     * @param params Payment parameters (already include hash)
-     * @returns HTML form string ready to send to browser
-     */
-    generate(params: Record<string, any>): string {
-        const escapedGatewayUrl = SanitizationUtil.escapeHtml(this.gatewayUrl);
+  /**
+   * Generate HTML form for payment submission
+   *
+   * @param params Payment parameters (already include hash)
+   * @returns HTML form string ready to send to browser
+   */
+  generate(params: Record<string, any>): string {
+    const escapedGatewayUrl = SanitizationUtil.escapeHtml(this.gatewayUrl);
 
-        // console.log('records params (generatePaymentForm) == ', params);
+    // console.log('records params (generatePaymentForm) == ', params);
 
-        const formInputs = Object.entries(params)
-            .map(([key, value]) => {
-                const escapedKey = SanitizationUtil.escapeHtml(key);
-                const escapedValue = SanitizationUtil.escapeHtml(String(value));
-                return `<input type="hidden" name="${escapedKey}" value="${escapedValue}" />`;
-            })
-            .join('\n');
+    const formInputs = Object.entries(params)
+      .map(([key, value]) => {
+        const escapedKey = SanitizationUtil.escapeHtml(key);
+        const escapedValue = SanitizationUtil.escapeHtml(String(value));
+        return `<input type="hidden" name="${escapedKey}" value="${escapedValue}" />`;
+      })
+      .join('\n');
 
-        console.log('Generated payment form HTML. \n', formInputs);
-
-        return `
+    return `
       <!DOCTYPE html>
       <html>
         <head>
@@ -55,19 +53,19 @@ export class FormGenerator {
         </body>
       </html>
       `.trim();
-    }
+  }
 
-    /**
-     * Generate form inputs only (for custom form integration)
-     *
-     * @param params Payment parameters
-     * @returns Array of input HTML strings
-     */
-    generateInputs(params: Record<string, any>): string[] {
-        return Object.entries(params).map(([key, value]) => {
-            const escapedKey = SanitizationUtil.escapeHtml(key);
-            const escapedValue = SanitizationUtil.escapeHtml(String(value));
-            return `<input type="hidden" name="${escapedKey}" value="${escapedValue}" />`;
-        });
-    }
+  /**
+   * Generate form inputs only (for custom form integration)
+   *
+   * @param params Payment parameters
+   * @returns Array of input HTML strings
+   */
+  generateInputs(params: Record<string, any>): string[] {
+    return Object.entries(params).map(([key, value]) => {
+      const escapedKey = SanitizationUtil.escapeHtml(key);
+      const escapedValue = SanitizationUtil.escapeHtml(String(value));
+      return `<input type="hidden" name="${escapedKey}" value="${escapedValue}" />`;
+    });
+  }
 }

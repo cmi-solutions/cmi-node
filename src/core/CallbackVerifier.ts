@@ -6,11 +6,11 @@
  */
 
 import { CallbackResult, ConfirmationMode } from '@types';
-import { HashUtil } from '@utils';
+import { HashUtil, SecretString } from '@utils';
 import { timingSafeCompare } from '@utils/crypto';
 
 export interface CallbackVerifierConfig {
-    storeKey: string;
+    storeKey: string | SecretString;
     confirmationMode: ConfirmationMode;
 }
 
@@ -33,7 +33,7 @@ export class CallbackVerifier {
      * @returns Callback verification result
      */
     verify(callbackParams: Record<string, any>): CallbackResult {
-        console.log('[Callback] Received parameters:', callbackParams);
+
 
         try {
             // Extract received hash
@@ -56,13 +56,11 @@ export class CallbackVerifier {
             // Recalculate hash (HASH #2 - Verify)
             const calculatedHash = HashUtil.generate(paramsForHash, this.config.storeKey);
 
-            console.log('[Callback] Hash verification:');
-            console.log('  Received:', receivedHash.substring(0, 20) + '...');
-            console.log('  Calculated:', calculatedHash.substring(0, 20) + '...');
+
 
             // Verify hash using constant-time comparison (prevents timing attacks)
             if (!timingSafeCompare(receivedHash, calculatedHash)) {
-                console.log('[Callback] ❌ Hash mismatch - possible tampering detected!');
+                // console.warn('[Callback] ❌ Hash mismatch - possible tampering detected!');
                 return {
                     success: false,
                     status: 'FAILURE',
@@ -70,7 +68,7 @@ export class CallbackVerifier {
                 };
             }
 
-            console.log('[Callback] ✅ Hash verified successfully');
+            // console.debug('[Callback] ✅ Hash verified successfully');
 
             // Extract return code
             const returnCode = String(
@@ -79,7 +77,7 @@ export class CallbackVerifier {
 
             // Check payment status
             if (returnCode === '00') {
-                console.log('[Callback] ✅ Payment successful');
+                // console.debug('[Callback] ✅ Payment successful');
 
                 // Get response based on confirmation mode
                 const response = this.getConfirmationResponse();
@@ -99,7 +97,7 @@ export class CallbackVerifier {
                     },
                 };
             } else {
-                console.log(`[Callback] ❌ Payment failed with code: ${returnCode}`);
+                // console.warn(`[Callback] ❌ Payment failed with code: ${returnCode}`);
                 return {
                     success: false,
                     status: 'FAILURE',

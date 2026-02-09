@@ -153,7 +153,7 @@ export class PaymentValidator extends Validator {
       if (typeof request.hashAlgorithm !== 'string' || request.hashAlgorithm.trim().length === 0) {
         throw new Error("hashAlgorithm cannot be empty when provided. Use 'ver3' or omit the field for default.");
       }
-      if (request.hashAlgorithm !== "ver3" ) {
+      if (request.hashAlgorithm !== "ver3") {
         throw new Error("hashAlgorithm must be 'ver3'");
       }
     }
@@ -212,7 +212,6 @@ export class PaymentValidator extends Validator {
    * that might exist as distinct keys (e.g. "BillToName" and "billtoname")
    */
   private static checkDuplicateFields(request: PaymentRequest): void {
-    console.log("Checking for duplicate fields in request:", request);
     const keys = Object.keys(request);
     const lowerCaseKeys = new Set<string>();
     const duplicates: string[] = [];
