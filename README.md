@@ -1,4 +1,4 @@
-# cmi-node
+# cmi-node ( NodeJS Package)
 
 [![npm version](https://img.shields.io/npm/v/cmi-node.svg)](https://www.npmjs.com/package/cmi-node)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
