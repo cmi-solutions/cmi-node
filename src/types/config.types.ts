@@ -20,6 +20,5 @@ export interface PaymentConfig {
   gatewayUrl: string;
   storetype: StoreType;
   trantype: string;
-  shopUrl: string;
   callbackUrl?: string;
 }

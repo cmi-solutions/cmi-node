@@ -89,7 +89,6 @@ export class CMIPaymentGateway {
       storeKey: this.secureStoreKey,
       storetype: this.config.storetype,
       trantype: this.config.trantype,
-      shopUrl: this.config.shopUrl,
       callbackUrl: this.config.callbackUrl,
     });
 

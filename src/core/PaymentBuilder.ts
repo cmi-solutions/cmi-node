@@ -16,7 +16,6 @@ export interface PaymentBuilderConfig {
     storeKey: string | SecretString;
     storetype: string;
     trantype: string;
-    shopUrl: string;
     callbackUrl?: string;
 }
 
@@ -46,19 +45,19 @@ export class PaymentBuilder {
 
         // Build payment parameters
         const params: Record<string, any> = {
-            clientid: this.config.clientId,
-            amount: FormatterUtil.formatAmount(paymentRequest.amount),
-            currency: FormatterUtil.formatCurrencyNumeric(String(paymentRequest.currency)),
             oid,
             rnd,
+            clientid: this.config.clientId,
+            trantype: this.config.trantype,
+            amount: FormatterUtil.formatAmount(paymentRequest.amount),
+            currency: FormatterUtil.formatCurrencyNumeric(String(paymentRequest.currency)),
+            storetype: FormatterUtil.formatStoreType(this.config.storetype),
             email: SanitizationUtil.sanitizeEmail(paymentRequest.email),
             BillToName: SanitizationUtil.sanitizeString(paymentRequest.BillToName, 50),
+            lang: normalizeLanguage(paymentRequest.lang || 'fr'),
             okUrl: paymentRequest.okUrl,
             failUrl: paymentRequest.failUrl,
-            storetype: FormatterUtil.formatStoreType(this.config.storetype),
-            trantype: this.config.trantype,
-            lang: normalizeLanguage(paymentRequest.lang || 'fr'),
-            shopurl: this.config.shopUrl,
+            shopurl: paymentRequest.shopUrl,
         };
 
         // Add hashAlgorithm - use provided value or default to 'ver3'

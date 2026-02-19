@@ -5,19 +5,19 @@ export type CurrencyInput = CurrencyCode | string;
 
 export interface PaymentRequest {
   amount: number | string;
-  oid?: string;
+  oid: string;
   okUrl: string;
   failUrl: string;
   shopUrl: string;
   email: string;
   BillToName: string;
   currency: CurrencyInput;
-  lang?: Language;
+  lang: Language;
   hashAlgorithm?: string;
   tel?: string;
 
-  rnd?: string;
-  encoding?: string;
+  rnd: string;
+  encoding: string;
   AutoRedirect?: boolean;
   BillToCity?: string;
   BillToCountry?: string;

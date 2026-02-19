@@ -17,7 +17,7 @@ export class ConfigValidator extends Validator {
   static validate(config: PaymentConfig): void {
     const required: (keyof PaymentConfig)[] = [
       'storeKey', 'clientId', 'gatewayUrl', 'storetype',
-      'trantype', 'shopUrl'
+      'trantype',
     ];
 
     for (const field of required) {
@@ -32,10 +32,6 @@ export class ConfigValidator extends Validator {
 
     if (!this.isValidUrl(config.gatewayUrl) || !this.hasHttpProtocol(config.gatewayUrl)) {
       throw new Error(`Invalid gatewayUrl: ${config.gatewayUrl} or missing http/https protocol`);
-    }
-
-    if (!this.isValidUrl(config.shopUrl) || !this.hasHttpProtocol(config.shopUrl)) {
-      throw new Error(`Invalid shopUrl: ${config.shopUrl} or missing http/https protocol`);
     }
 
     // Only validate callbackUrl if provided (it's optional now)

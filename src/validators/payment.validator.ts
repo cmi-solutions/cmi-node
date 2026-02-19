@@ -32,12 +32,20 @@ export class PaymentValidator extends Validator {
       throw new Error("Amount must be greater than or equal to 1");
     }
 
+    if (!request.shopUrl || !this.isValidUrl(request.shopUrl)) {
+      throw new Error("Valid shopUrl is required");
+    }
+
     if (!request.okUrl || !this.isValidUrl(request.okUrl)) {
       throw new Error("Valid okUrl is required");
     }
 
     if (!request.failUrl || !this.isValidUrl(request.failUrl)) {
       throw new Error("Valid failUrl is required");
+    }
+
+    if (!this.hasHttpProtocol(request.shopUrl)) {
+      throw new Error("http/https protocol is required for shopUrl");
     }
 
     if (!this.hasHttpProtocol(request.okUrl)) {
