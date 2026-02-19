@@ -8,7 +8,6 @@ import { StoreType } from "@constants";
  * @property {string} gatewayUrl - CMI gateway URL
  * @property {StoreType} storetype - Store type (3D secure or not)
  * @property {string} trantype - Transaction type (PreAuth, Auth, etc.)
- * @property {string} shopUrl - Shop/cancel URL
  * @property {string} [callbackUrl] - Optional callback URL
  *   - If provided: Use this URL for payment callbacks (manual mode)
  *   - If omitted: Use SDK-managed callback handler (automatic mode)
