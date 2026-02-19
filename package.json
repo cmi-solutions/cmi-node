@@ -3,24 +3,20 @@
   "version": "1.0.0",
   "description": "Framework-agnostic CMI Payment Gateway SDK with built-in security for Node.js",
   "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": {
       "import": {
         "types": "./dist/index.d.ts",
-        "default": "./dist/index.mjs"
+        "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.ts",
+        "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
-    },
-    "./security": {
-      "import": "./dist/security.mjs",
-      "require": "./dist/security.cjs",
-      "types": "./dist/security.d.ts"
     },
     "./package.json": "./package.json"
   },
@@ -37,12 +33,8 @@
     "lint": "eslint src/**/*.ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "type-check": "tsc --noEmit",
-    "build:tsc": "tsc && tsc-alias -p tsconfig.json",
-    "build:esm": "node scripts/build-esm.js",
-    "build:cjs": "node scripts/build-cjs.js",
-    "build": "npm run clean && npm run build:tsc && npm run build:esm && npm run build:cjs",
-    "build:watch": "concurrently \"tsc -w\" \"tsc-alias -w -p tsconfig.json\"",
-    "dev": "nodemon --watch src --ext ts --exec npm run build"
+    "build": "tsup",
+    "dev": "tsup --watch"
   },
   "keywords": [
     "payment",
@@ -79,7 +71,7 @@
     "c8": "^9.1.0",
     "eslint": "^8.56.0",
     "prettier": "^3.2.0",
-    "tsc-alias": "^1.8.16",
+    "tsup": "^8.5.1",
     "typescript": "^5.9.3"
   },
   "publishConfig": {

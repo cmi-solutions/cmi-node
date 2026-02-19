@@ -1,7 +1,9 @@
 // src/middleware/fastify.helper.ts
 
 import { CallbackHandler } from "@core/CallbackHandler";
+import { CMIPaymentGateway } from "@core/CMIPaymentGateway";
 import { CallbackHandlerOptions } from "@types";
+import { logger } from "@logger";
 
 /**
  * Create Fastify route handler for CMI payment callbacks
@@ -39,7 +41,7 @@ import { CallbackHandlerOptions } from "@types";
  * ```
  */
 export function createFastifyHandler(
-    gateway: any,
+    gateway: CMIPaymentGateway,
     options?: CallbackHandlerOptions
 ) {
     const handler = new CallbackHandler(gateway, options);
@@ -82,7 +84,7 @@ export function createFastifyHandler(
  */
 export function registerFastifyCallback(
     fastify: any,
-    gateway: any,
+    gateway: CMIPaymentGateway,
     options: CallbackHandlerOptions & { path?: string }
 ) {
     const path = options.path || '/api/payment/callback';
@@ -90,5 +92,5 @@ export function registerFastifyCallback(
 
     fastify.post(path, handler);
 
-    console.log(`✅ CMI Payment Gateway: Callback registered at POST ${path}`);
+    logger.info(`CMI Payment Gateway: Callback registered at POST ${path}`);
 }

@@ -1,6 +1,7 @@
 // src/middleware/nestjs.helper.ts
 
 import { CallbackHandler } from "@core/CallbackHandler";
+import { CMIPaymentGateway } from "@core/CMIPaymentGateway";
 import { CallbackHandlerOptions, CallbackResult } from "@types";
 
 /**
@@ -52,7 +53,7 @@ import { CallbackHandlerOptions, CallbackResult } from "@types";
 export class NestJSCallbackHandler {
     private handler: CallbackHandler;
 
-    constructor(gateway: any, options?: CallbackHandlerOptions) {
+    constructor(gateway: CMIPaymentGateway, options?: CallbackHandlerOptions) {
         this.handler = new CallbackHandler(gateway, options);
     }
 
@@ -129,7 +130,7 @@ export class NestJSCallbackHandler {
  * ```
  */
 export function createNestJSHandler(
-    gateway: any,
+    gateway: CMIPaymentGateway,
     options?: CallbackHandlerOptions
 ) {
     const nestHandler = new NestJSCallbackHandler(gateway, options);

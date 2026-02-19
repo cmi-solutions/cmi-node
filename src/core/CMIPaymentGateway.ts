@@ -10,6 +10,7 @@ import {
 } from "@types";
 import { ConfigValidator } from "@validators";
 import { SecretString } from "@utils";
+import { logger } from "@logger";
 import { CallbackHandler } from "./CallbackHandler";
 import { PaymentBuilder } from "./PaymentBuilder";
 import { FormGenerator } from "./FormGenerator";
@@ -163,14 +164,14 @@ export class CMIPaymentGateway {
     try {
       // Register POST endpoint
       app.post(callbackPath, this.middleware);
-      console.log(
-        `✅ CMI Payment Gateway: Callback handler auto-registered at POST ${callbackPath}`
+      logger.info(
+        `CMI Payment Gateway: Callback handler auto-registered at POST ${callbackPath}`
       );
-      console.log(
-        `⚙️ Confirmation Mode: ${this.config.confirmationMode || "auto"}`
+      logger.info(
+        `Confirmation Mode: ${this.config.confirmationMode || "auto"}`
       );
     } catch (error) {
-      console.error(
+      logger.error(
         "Failed to auto-register Express callback middleware:",
         error
       );

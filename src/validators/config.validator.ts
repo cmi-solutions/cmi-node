@@ -70,9 +70,9 @@ export class ConfigValidator extends Validator {
    * This is separate because confirmationMode is optional and passed differently
    */
   static validateConfirmationMode(mode: string | undefined): ConfirmationMode {
-    // Default to 'auto' if not provided
+    // Default to 'manual' if not provided
     if (mode === undefined || mode === null || mode === '') {
-      return 'auto';
+      return 'manual';
     }
 
     const normalizedMode = mode.toLowerCase();

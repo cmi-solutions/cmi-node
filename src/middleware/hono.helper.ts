@@ -1,7 +1,9 @@
 // src/middleware/hono.helper.ts
 
 import { CallbackHandler } from "@core/CallbackHandler";
+import { CMIPaymentGateway } from "@core/CMIPaymentGateway";
 import { CallbackHandlerOptions } from "@types";
+import { logger } from "@logger";
 
 /**
  * Create Hono route handler for CMI payment callbacks
@@ -42,7 +44,7 @@ import { CallbackHandlerOptions } from "@types";
  * ```
  */
 export function createHonoHandler(
-    gateway: any,
+    gateway: CMIPaymentGateway,
     options?: CallbackHandlerOptions
 ) {
     const handler = new CallbackHandler(gateway, options);
@@ -93,7 +95,7 @@ export function createHonoHandler(
  */
 export function registerHonoCallback(
     app: any,
-    gateway: any,
+    gateway: CMIPaymentGateway,
     options: CallbackHandlerOptions & { path?: string }
 ) {
     const path = options.path || '/api/payment/callback';
@@ -101,5 +103,5 @@ export function registerHonoCallback(
 
     app.post(path, handler);
 
-    console.log(`✅ CMI Payment Gateway: Callback registered at POST ${path}`);
+    logger.info(`CMI Payment Gateway: Callback registered at POST ${path}`);
 }

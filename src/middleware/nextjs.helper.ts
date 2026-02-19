@@ -1,4 +1,5 @@
 import { CallbackHandler } from "@core/CallbackHandler";
+import { CMIPaymentGateway } from "@core/CMIPaymentGateway";
 import { CallbackHandlerOptions } from "@types";
 
 
@@ -60,7 +61,7 @@ import { CallbackHandlerOptions } from "@types";
  * ```
  */
 export function createNextJsHandler(
-    gateway: any,
+    gateway: CMIPaymentGateway,
     options?: CallbackHandlerOptions
 ) {
     const handler = new CallbackHandler(gateway, options);
@@ -101,7 +102,7 @@ export function createNextJsHandler(
  * ```
  */
 export async function handleNextJsCallback(
-    gateway: any,
+    gateway: CMIPaymentGateway,
     request: any,
     options?: CallbackHandlerOptions
 ) {

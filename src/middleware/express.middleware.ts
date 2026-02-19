@@ -1,4 +1,5 @@
 import { CallbackHandler } from "@core/CallbackHandler";
+import { CMIPaymentGateway } from "@core/CMIPaymentGateway";
 import { CallbackHandlerOptions } from "@types";
 
 /**
@@ -43,7 +44,7 @@ import { CallbackHandlerOptions } from "@types";
  * ```
  */
 export function createExpressMiddleware(
-    gateway: any,
+    gateway: CMIPaymentGateway,
     options?: CallbackHandlerOptions
 ) {
     const handler = new CallbackHandler(gateway, options);
@@ -75,7 +76,7 @@ export function createExpressMiddleware(
  * ```
  */
 export function createCallbackHandler(
-    gateway: any,
+    gateway: CMIPaymentGateway,
     options?: CallbackHandlerOptions
 ): CallbackHandler {
     return new CallbackHandler(gateway, options);
