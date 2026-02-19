@@ -15,7 +15,7 @@ import { CallbackHandlerOptions } from "@types";
  * @example Pages Router
  * ```typescript
  * // pages/api/payment/callback.ts
- * import { CMIPaymentGateway, createNextJsHandler } from '@ishakzail/cmi-payment-gateway';
+ * import { CMIPaymentGateway, createNextJsHandler } from 'cmi-node';
  * 
  * const gateway = new CMIPaymentGateway({
  *   clientId: process.env.CMI_CLIENT_ID!,
@@ -42,7 +42,7 @@ import { CallbackHandlerOptions } from "@types";
  * ```typescript
  * // app/api/payment/callback/route.ts
  * import { NextRequest, NextResponse } from 'next/server';
- * import { CMIPaymentGateway } from '@ishakzail/cmi-payment-gateway';
+ * import { CMIPaymentGateway } from 'cmi-node';
  * 
  * const gateway = new CMIPaymentGateway({ ... });
  * 
@@ -84,11 +84,20 @@ export function createNextJsHandler(
 /**
  * Helper for Next.js App Router (route.ts)
  * 
+ * Returns a web-standard Response object compatible with Next.js App Router.
+ * The return type is kept as `any` to avoid leaking internal type dependencies
+ * to consumers — the actual returned value is always a `Response` instance.
+ * 
+ * @param gateway - CMIPaymentGateway instance
+ * @param request - Incoming Request (NextRequest or web-standard Request)
+ * @param options - Handler options
+ * @returns A web-standard Response object
+ * 
  * @example
  * ```typescript
  * // app/api/payment/callback/route.ts
  * import { NextRequest } from 'next/server';
- * import { CMIPaymentGateway, handleNextJsCallback } from '@ishakzail/cmi-payment-gateway';
+ * import { CMIPaymentGateway, handleNextJsCallback } from 'cmi-node';
  * 
  * const gateway = new CMIPaymentGateway({ ... });
  * 
@@ -105,7 +114,7 @@ export async function handleNextJsCallback(
     gateway: CMIPaymentGateway,
     request: any,
     options?: CallbackHandlerOptions
-) {
+): Promise<any> {
     const handler = new CallbackHandler(gateway, options);
 
     try {
@@ -114,22 +123,26 @@ export async function handleNextJsCallback(
         try {
             params = await request.json();
         } catch {
-            // Fallback to query params if body parsing fails
-            params = Object.fromEntries(request.nextUrl?.searchParams || []);
+            // Fallback to form data if JSON parsing fails
+            try {
+                const formData = await request.formData();
+                params = Object.fromEntries(formData.entries());
+            } catch {
+                // Final fallback to query params
+                params = Object.fromEntries(request.nextUrl?.searchParams || []);
+            }
         }
 
         const result = await handler.handle(params);
         const response = handler.getResponse(result);
 
-        // Return Response object (App Router compatible)
-        const ResponseClass = globalThis.Response || Object;
-        return new ResponseClass(response.body, {
+        // Return web-standard Response (App Router compatible)
+        return new Response(response.body, {
             status: response.status,
             headers: { 'Content-Type': 'text/plain' }
         });
     } catch (error) {
-        const ResponseClass = globalThis.Response || Object;
-        return new ResponseClass('FAILURE', {
+        return new Response('FAILURE', {
             status: 500,
             headers: { 'Content-Type': 'text/plain' }
         });

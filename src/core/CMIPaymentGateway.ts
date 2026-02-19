@@ -125,7 +125,7 @@ export class CMIPaymentGateway {
       autoRespond: userCallbackConfig?.autoRespond ?? true,
       successResponse: userCallbackConfig?.successResponse,
       failureResponse: userCallbackConfig?.failureResponse,
-      supportGetMethod: userCallbackConfig?.supportGetMethod ?? true,
+      supportGetMethod: userCallbackConfig?.supportGetMethod ?? false,
     });
 
     // Store middleware

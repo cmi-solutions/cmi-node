@@ -8,7 +8,7 @@
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
-interface LoggerConfig {
+export interface LoggerConfig {
     /** Minimum log level to output */
     level: LogLevel;
     /** Prefix for all log messages */

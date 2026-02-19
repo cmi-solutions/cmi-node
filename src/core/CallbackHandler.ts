@@ -21,9 +21,9 @@ export class CallbackHandler {
       autoRespond: options?.autoRespond ?? true,
       successResponse: options?.successResponse ?? "",
       failureResponse: options?.failureResponse ?? "FAILURE",
-      onSuccess: options?.onSuccess ?? (() => {}),
-      onFailure: options?.onFailure ?? (() => {}),
-      supportGetMethod: options?.supportGetMethod ?? true,
+      onSuccess: options?.onSuccess ?? (() => { }),
+      onFailure: options?.onFailure ?? (() => { }),
+      supportGetMethod: options?.supportGetMethod ?? false,
     };
   }
 

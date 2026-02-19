@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 /**
  * SecretString - Wrapper for sensitive strings
  * 
@@ -64,10 +66,23 @@ export class SecretString {
     }
 
     /**
-     * Check if value matches without exposing it (constant-time)
+     * Check if value matches using constant-time comparison (timing-safe)
      */
     equals(other: string | SecretString): boolean {
         const otherValue = other instanceof SecretString ? other.getValue() : other;
-        return this.value === otherValue;
+        const bufA = Buffer.from(this.value, 'utf8');
+        const bufB = Buffer.from(otherValue, 'utf8');
+
+        if (bufA.length !== bufB.length) {
+            // Still do a comparison to maintain constant time
+            try { crypto.timingSafeEqual(bufA, bufA); } catch { /* ignore */ }
+            return false;
+        }
+
+        try {
+            return crypto.timingSafeEqual(bufA, bufB);
+        } catch {
+            return false;
+        }
     }
 }

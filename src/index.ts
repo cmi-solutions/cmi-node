@@ -14,8 +14,6 @@ export type {
   PaymentRequest,
   CallbackResult,
   CallbackHandlerOptions,
-  CallbackRequest,
-  CallbackResponse,
   ConfirmationMode,
   CallbackMiddleware,
   CMIPaymentGatewayOptions
@@ -43,6 +41,7 @@ export {
 
 // Logger exports
 export { logger, configureLogger, resetLogger } from './logger';
+export type { LogLevel, LoggerConfig } from './logger';
 
 // ============================================
 // Framework-Specific Helpers

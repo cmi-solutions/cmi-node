@@ -8,6 +8,7 @@
 import { CallbackResult, ConfirmationMode } from '@types';
 import { HashUtil, SecretString } from '@utils';
 import { timingSafeCompare } from '@utils/crypto';
+import { logger } from '@logger';
 
 export interface CallbackVerifierConfig {
     storeKey: string | SecretString;
@@ -116,7 +117,7 @@ export class CallbackVerifier {
                 };
             }
         } catch (error) {
-            console.error('[Callback] Error verifying callback:', error);
+            logger.error('Error verifying callback:', error);
             return {
                 success: false,
                 status: 'FAILURE',
