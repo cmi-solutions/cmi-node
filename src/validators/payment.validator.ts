@@ -219,7 +219,7 @@ export class PaymentValidator extends Validator {
    * Since JS objects normalize keys, this mainly catches case-insensitive duplicates
    * that might exist as distinct keys (e.g. "BillToName" and "billtoname")
    */
-  private static checkDuplicateFields(request: PaymentRequest): void {
+  public static checkDuplicateFields(request: Record<string, any>): void {
     const keys = Object.keys(request);
     const lowerCaseKeys = new Set<string>();
     const duplicates: string[] = [];
@@ -239,5 +239,13 @@ export class PaymentValidator extends Validator {
         `Ensure each field is provided only once.`
       );
     }
+  }
+
+  /**
+   * Run after building params to catch any duplicate mappings generated during
+   * the build process (e.g. mapping callbackUrl -> callbackURL, or shopUrl -> shopurl).
+   */
+  static validateFinalParams(params: Record<string, any>): void {
+    this.checkDuplicateFields(params);
   }
 }

@@ -92,6 +92,10 @@ export class PaymentBuilder {
         // Add any additional custom fields
         this.addCustomFields(params, paymentRequest);
 
+        // Run final validation to catch any build-time duplicates
+        // (e.g. if the user passed 'shopUrl' in request, but builder also added 'shopurl')
+        PaymentValidator.validateFinalParams(params);
+
         // Generate hash (HASH #1 - Outgoing)
         params.hash = HashUtil.generate(params, this.config.storeKey);
 

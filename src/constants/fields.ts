@@ -45,6 +45,7 @@ export const STANDARD_PAYMENT_FIELDS = [
     'oid',
     'okUrl',
     'failUrl',
+    'shopUrl',
     'email',
     'BillToName',
     'rnd',
