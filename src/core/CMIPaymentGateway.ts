@@ -66,8 +66,8 @@ export class CMIPaymentGateway {
     config: PaymentConfig & { confirmationMode?: ConfirmationMode | string },
     options: CMIPaymentGatewayOptions = {}
   ) {
-    // Validate configuration using existing validator
-    ConfigValidator.validate(config);
+    // Validate configuration, normalize keys case-insensitively, and reject unknowns/duplicates
+    const normalizedConfig = ConfigValidator.normalizeAndValidate(config as Record<string, any>);
 
     // Validate and normalize confirmation mode (case-insensitive)
     const normalizedConfirmationMode = ConfigValidator.validateConfirmationMode(
@@ -76,7 +76,7 @@ export class CMIPaymentGateway {
 
     // Store config with validated confirmation mode
     this.config = {
-      ...config,
+      ...normalizedConfig,
       confirmationMode: normalizedConfirmationMode,
     };
 

@@ -23,7 +23,6 @@ const validConfig = {
     storeKey: 'test-store-key-12345',
     clientId: '600000123',
     gatewayUrl: 'https://testpayment.cmi.co.ma/fim/est3Dgate',
-    shopUrl: 'https://example.com',
     storetype: '3d_pay_hosting' as const,
     trantype: 'PreAuth',
 };
@@ -389,18 +388,22 @@ describe('CMIPaymentGateway - generatePaymentForm', () => {
         const form = gateway.generatePaymentForm(params);
 
         assert.ok(form.includes('<form'));
-        assert.ok(form.includes('method="post"') || form.includes("method='post'"));
+        assert.ok(form.includes('method="POST"') || form.includes('method="post"') || form.includes("method='post'") || form.includes("method='POST'"));
         assert.ok(form.includes(validConfig.gatewayUrl));
     });
 
     it('should prevent XSS in form values', () => {
         const gateway = new CMIPaymentGateway(validConfig);
+        // Use a custom passthrough field to inject XSS payload;
+        // BillToName is blocked by validator, but a custom arbitrary field is
+        // passed through and must be HTML-escaped by the form generator.
         const params = gateway.createPaymentParams({
             ...validPaymentRequest,
-            BillToName: '<script>alert(1)</script>',
+            customField: '<script>alert(1)</script>',
         });
         const form = gateway.generatePaymentForm(params);
-        assert.ok(!form.includes('<script>'));
+        assert.ok(!form.includes('<script>'), 'Raw <script> tag must not appear in output');
+        assert.ok(form.includes('&lt;script&gt;'), 'XSS payload should be HTML-escaped');
     });
 });
 

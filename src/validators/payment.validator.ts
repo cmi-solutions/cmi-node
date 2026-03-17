@@ -4,6 +4,65 @@ import { PaymentRequest } from "@types";
 import { Validator } from "@validators";
 
 export class PaymentValidator extends Validator {
+  /**
+   * Map of lowercase known field names -> canonical camelCase key.
+   * Covers every field defined in PaymentRequest.
+   * Unknown/custom fields are NOT in this map and will pass through unchanged.
+   */
+  private static readonly PAYMENT_REQUEST_SCHEMA_MAP: Record<string, string> = {
+    'amount':           'amount',
+    'oid':              'oid',
+    'okurl':            'okUrl',
+    'failurl':          'failUrl',
+    'shopurl':          'shopUrl',
+    'email':            'email',
+    'billtoname':       'BillToName',
+    'currency':         'currency',
+    'lang':             'lang',
+    'hashalgorithm':    'hashAlgorithm',
+    'tel':              'tel',
+    'rnd':              'rnd',
+    'encoding':         'encoding',
+    'autoredirect':     'AutoRedirect',
+    'billtocity':       'BillToCity',
+    'billtocountry':    'BillToCountry',
+    'billtostreet1':    'BillToStreet1',
+    'billtostateprov':  'BillToStateProv',
+    'billtopostalcode': 'BillToPostalCode',
+    'billtotelvoice':   'BillToTelVoice',
+    'billtocompany':    'BillToCompany',
+    'billtostreet2':    'BillToStreet2',
+    'billtostreet3':    'BillToStreet3',
+    'amountcur':        'amountCur',
+    'symbolcur':        'symbolCur',
+  };
+
+  /**
+   * Normalize a raw payment request object:
+   * - Known fields (e.g. shopurl, OKURL) are remapped to their canonical casing (shopUrl, okUrl).
+   * - Unknown/custom fields are passed through unchanged.
+   * - If two input keys map to the same canonical field, an error is thrown.
+   */
+  static normalizeRequest(raw: Record<string, any>): PaymentRequest {
+    const normalized: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(raw)) {
+      const lowerKey = key.toLowerCase();
+      const canonicalKey = this.PAYMENT_REQUEST_SCHEMA_MAP[lowerKey] ?? key; // keep custom fields as-is
+
+      if (canonicalKey in normalized) {
+        throw new Error(
+          `Duplicate field detected: "${key}" maps to the same field as a previously provided key ("${canonicalKey}"). ` +
+          `Ensure each field is provided only once.`
+        );
+      }
+
+      normalized[canonicalKey] = value;
+    }
+
+    return normalized as PaymentRequest;
+  }
+
   static validate(request: PaymentRequest): void {
     // Check for duplicate/conflicting field names (case-insensitive)
     this.checkDuplicateFields(request);

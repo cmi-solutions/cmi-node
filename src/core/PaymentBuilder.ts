@@ -36,6 +36,11 @@ export class PaymentBuilder {
      * @returns Payment parameters ready to send to CMI
      */
     build(paymentRequest: PaymentRequest): Record<string, any> {
+        // Normalize field names case-insensitively to their canonical form first
+        // e.g. "shopurl" -> "shopUrl", "OKURL" -> "okUrl", "billtoname" -> "BillToName"
+        // Unknown/custom fields are kept as-is.
+        paymentRequest = PaymentValidator.normalizeRequest(paymentRequest as Record<string, any>);
+
         // Validate payment request using existing validator
         PaymentValidator.validate(paymentRequest);
 
@@ -57,7 +62,7 @@ export class PaymentBuilder {
             lang: normalizeLanguage(paymentRequest.lang || 'fr'),
             okUrl: paymentRequest.okUrl,
             failUrl: paymentRequest.failUrl,
-            shopurl: paymentRequest.shopUrl,
+            shopUrl: paymentRequest.shopUrl,
         };
 
         // Add hashAlgorithm - use provided value or default to 'ver3'
@@ -126,11 +131,14 @@ export class PaymentBuilder {
         params: Record<string, any>,
         paymentRequest: PaymentRequest
     ): void {
-        const standardFields = new Set(STANDARD_PAYMENT_FIELDS);
+        // Use lowercase for both sets so comparison is case-insensitive
+        const standardFields = new Set(STANDARD_PAYMENT_FIELDS.map(f => f.toLowerCase()));
+        const existingKeys = new Set(Object.keys(params).map(k => k.toLowerCase()));
 
         for (const [key, value] of Object.entries(paymentRequest)) {
-            // Skip if: it's a standard field OR if we already set this field in params
-            if (!standardFields.has(key as any) && !(key in params) && value !== undefined && value !== null) {
+            const lowerKey = key.toLowerCase();
+            // Skip if: it's a standard field OR already mapped (even with different casing)
+            if (!standardFields.has(lowerKey) && !existingKeys.has(lowerKey) && value !== undefined && value !== null) {
                 params[key] = String(value);
             }
         }

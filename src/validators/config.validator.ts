@@ -12,6 +12,61 @@ import { Validator } from './validator';
 
 export class ConfigValidator extends Validator {
   /**
+   * Map of lowercase case-insensitive input keys -> canonical camelCase schema keys.
+   */
+  private static readonly CONFIG_SCHEMA_MAP: Record<string, keyof PaymentConfig> = {
+    'storekey':   'storeKey',
+    'clientid':   'clientId',
+    'gatewayurl': 'gatewayUrl',
+    'storetype':  'storetype',
+    'trantype':   'trantype',
+    'callbackurl': 'callbackUrl'
+  };
+
+  /**
+   * Validates and normalizes raw configuration input:
+   * 1. Rejects completely unknown fields
+   * 2. Detects duplicates (e.g. providing both clientid and clientId)
+   * 3. Normalizes all known fields to their correct internal camelCase casing.
+   * 4. Runs existing config validations on the normalized object.
+   */
+  static normalizeAndValidate(rawConfig: Record<string, any>): PaymentConfig {
+    const normalized: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(rawConfig)) {
+      // We skip internal non-cmi fields some frameworks might inject, 
+      // but if the user provided confirmationMode explicitly, keep it.
+      if (key === 'confirmationMode') {
+        normalized[key] = value;
+        continue;
+      }
+
+      const lowerKey = key.toLowerCase();
+      const mappedKey = this.CONFIG_SCHEMA_MAP[lowerKey];
+
+      if (!mappedKey) {
+        throw new Error(
+          `Unknown configuration field detected: "${key}". The configuration must only contain valid schema fields.`
+        );
+      }
+
+      if (mappedKey in normalized) {
+        throw new Error(
+          `Duplicate configuration field detected: "${key}" maps to the same field as a previously provided key ("${mappedKey}"). ` +
+          `Ensure each field is provided only once.`
+        );
+      }
+
+      normalized[mappedKey] = value;
+    }
+
+    // Now validate the strictly generated, correctly cased config object
+    this.validate(normalized as PaymentConfig);
+
+    return normalized as PaymentConfig;
+  }
+
+  /**
    * Validate payment gateway configuration
    */
   static validate(config: PaymentConfig): void {

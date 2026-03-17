@@ -24,7 +24,6 @@ import { CallbackHandlerOptions } from "@types";
  *   gatewayUrl: 'https://gateway.cmi.co.ma/...',
  *   storetype: '3d_pay_hosting',
  *   trantype: 'PreAuth',
- *   shopUrl: 'https://yoursite.com'
  *   // Note: callbackUrl is optional when using middleware
  * });
  * 
