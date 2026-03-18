@@ -52,7 +52,7 @@ export class PaymentBuilder {
         const params: Record<string, any> = {
             oid,
             rnd,
-            clientid: this.config.clientId,
+            clientId: this.config.clientId,
             trantype: this.config.trantype,
             amount: FormatterUtil.formatAmount(paymentRequest.amount),
             currency: FormatterUtil.formatCurrencyNumeric(String(paymentRequest.currency)),
@@ -73,9 +73,9 @@ export class PaymentBuilder {
         // Validator ensures if provided, it must be 'UTF-8'
         params.encoding = paymentRequest.encoding ?? 'UTF-8';
 
-        // Add callbackURL if provided in config
+        // Add callbackUrl if provided in config
         if (this.config.callbackUrl) {
-            params.callbackURL = this.config.callbackUrl;
+            params.callbackUrl = this.config.callbackUrl;
         }
 
         // Add optional billing fields
