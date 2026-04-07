@@ -26,8 +26,6 @@ export class FormGenerator {
   generate(params: Record<string, any>): string {
     const escapedGatewayUrl = SanitizationUtil.escapeHtml(this.gatewayUrl);
 
-    // console.log('records params (generatePaymentForm) == ', params);
-
     const formInputs = Object.entries(params)
       .map(([key, value]) => {
         const escapedKey = SanitizationUtil.escapeHtml(key);

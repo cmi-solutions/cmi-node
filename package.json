@@ -18,6 +18,56 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./express": {
+      "import": {
+        "types": "./dist/adapters/express.d.ts",
+        "default": "./dist/adapters/express.js"
+      },
+      "require": {
+        "types": "./dist/adapters/express.d.cts",
+        "default": "./dist/adapters/express.cjs"
+      }
+    },
+    "./nextjs": {
+      "import": {
+        "types": "./dist/adapters/nextjs.d.ts",
+        "default": "./dist/adapters/nextjs.js"
+      },
+      "require": {
+        "types": "./dist/adapters/nextjs.d.cts",
+        "default": "./dist/adapters/nextjs.cjs"
+      }
+    },
+    "./fastify": {
+      "import": {
+        "types": "./dist/adapters/fastify.d.ts",
+        "default": "./dist/adapters/fastify.js"
+      },
+      "require": {
+        "types": "./dist/adapters/fastify.d.cts",
+        "default": "./dist/adapters/fastify.cjs"
+      }
+    },
+    "./hono": {
+      "import": {
+        "types": "./dist/adapters/hono.d.ts",
+        "default": "./dist/adapters/hono.js"
+      },
+      "require": {
+        "types": "./dist/adapters/hono.d.cts",
+        "default": "./dist/adapters/hono.cjs"
+      }
+    },
+    "./nestjs": {
+      "import": {
+        "types": "./dist/adapters/nestjs.d.ts",
+        "default": "./dist/adapters/nestjs.js"
+      },
+      "require": {
+        "types": "./dist/adapters/nestjs.d.cts",
+        "default": "./dist/adapters/nestjs.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -27,9 +77,9 @@
   ],
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "prepublishOnly": "npm run build",
-    "test": "echo 'Tests require compilation. Run npm run build first, then node --test dist/test/**/*.test.js' && exit 0",
-    "test:coverage": "c8 npm test",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "tsx --test test/gateway.test.ts",
+    "test:coverage": "c8 tsx --test test/gateway.test.ts",
     "lint": "eslint src/**/*.ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "type-check": "tsc --noEmit",
@@ -51,7 +101,7 @@
     "secure-payments",
     "3d-secure"
   ],
-  "author": "ishak.zail.iz@gmail.com",
+  "author": "Ishak Zail <ishak.zail.iz@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -64,6 +114,7 @@
   "engines": {
     "node": ">=18.0.0"
   },
+  "packageManager": "npm@10.9.2",
   "devDependencies": {
     "@types/node": "^20.19.24",
     "@typescript-eslint/eslint-plugin": "^6.19.0",
@@ -72,9 +123,11 @@
     "eslint": "^8.56.0",
     "prettier": "^3.2.0",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "tsx": "^4.19.0",
+    "typescript": "^5.4.5"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   }
 }

@@ -10,6 +10,10 @@ import crypto from 'crypto';
  * Perform a constant-time comparison of two strings.
  * This prevents timing attacks when comparing hashes.
  * 
+ * Uses an ephemeral HMAC-then-compare strategy so that neither
+ * the value nor the length of either string can be inferred from
+ * response timing, regardless of whether lengths differ.
+ * 
  * @param a - First string to compare
  * @param b - Second string to compare
  * @returns true if strings are equal, false otherwise
@@ -21,17 +25,13 @@ import crypto from 'crypto';
  */
 export function timingSafeCompare(a: string, b: string): boolean {
     try {
-        const bufA = Buffer.from(a, 'utf8');
-        const bufB = Buffer.from(b, 'utf8');
-
-        // If lengths differ, still do comparison to prevent timing leak
-        if (bufA.length !== bufB.length) {
-            // Compare with self to maintain constant time
-            crypto.timingSafeEqual(bufA, bufA);
-            return false;
-        }
-
-        return crypto.timingSafeEqual(bufA, bufB);
+        // Generate a fresh random key for each comparison.
+        // HMAC output is always fixed-length (32 bytes for SHA-256),
+        // so the comparison time is constant regardless of input length.
+        const key = crypto.randomBytes(32);
+        const hmacA = crypto.createHmac('sha256', key).update(a, 'utf8').digest();
+        const hmacB = crypto.createHmac('sha256', key).update(b, 'utf8').digest();
+        return crypto.timingSafeEqual(hmacA, hmacB);
     } catch {
         return false;
     }

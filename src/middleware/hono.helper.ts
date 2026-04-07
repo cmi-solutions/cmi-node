@@ -18,7 +18,7 @@ import { logger } from "@logger";
  * @example
  * ```typescript
  * import { Hono } from 'hono';
- * import { CMIPaymentGateway, createHonoHandler } from '@ishakzail/cmi-payment-gateway';
+ * import { CMIPaymentGateway, createHonoHandler } from 'cmi-node';
  * 
  * const app = new Hono();
  * 
@@ -28,7 +28,6 @@ import { logger } from "@logger";
  *   gatewayUrl: process.env.CMI_GATEWAY_URL!,
  *   storetype: '3d_pay_hosting',
  *   trantype: 'PreAuth',
- *   shopUrl: 'https://yoursite.com',
  *   callbackUrl: 'https://yoursite.com/cmi/callback',
  *   confirmationMode: 'auto'
  * });
@@ -78,7 +77,7 @@ export function createHonoHandler(
  * @example
  * ```typescript
  * import { Hono } from 'hono';
- * import { CMIPaymentGateway, registerHonoCallback } from '@ishakzail/cmi-payment-gateway';
+ * import { CMIPaymentGateway, registerHonoCallback } from 'cmi-node';
  * 
  * const app = new Hono();
  * const gateway = new CMIPaymentGateway({ ... });

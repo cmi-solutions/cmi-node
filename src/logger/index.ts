@@ -24,8 +24,19 @@ const LOG_LEVELS: Record<LogLevel, number> = {
     error: 3,
 };
 
+function getDefaultLogLevel(): LogLevel {
+    try {
+        if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+            return 'error';
+        }
+    } catch {
+        // process.env access may throw in some edge runtimes
+    }
+    return 'debug';
+}
+
 const defaultConfig: LoggerConfig = {
-    level: process.env.NODE_ENV === 'production' ? 'error' : 'debug',
+    level: getDefaultLogLevel(),
     prefix: '[CMI Gateway]',
     enabled: true,
 };

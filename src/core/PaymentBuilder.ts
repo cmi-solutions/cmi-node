@@ -11,6 +11,11 @@ import { HashUtil, SanitizationUtil, FormatterUtil, GeneratorUtil, SecretString 
 import { normalizeLanguage } from '@constants';
 import { OPTIONAL_PAYMENT_FIELDS, STANDARD_PAYMENT_FIELDS } from '@constants/fields';
 
+// Pre-computed at module load — STANDARD_PAYMENT_FIELDS is a constant so this
+// never needs to be rebuilt per-request. Fixes a per-call allocation (PERF-2).
+const STANDARD_FIELDS_LOWER: ReadonlySet<string> =
+    new Set(STANDARD_PAYMENT_FIELDS.map(f => f.toLowerCase()));
+
 export interface PaymentBuilderConfig {
     clientId: string;
     storeKey: string | SecretString;
@@ -115,9 +120,12 @@ export class PaymentBuilder {
         paymentRequest: PaymentRequest
     ): void {
         for (const field of OPTIONAL_PAYMENT_FIELDS) {
-            if (paymentRequest[field]) {
+            // Use explicit null/undefined check so falsy values like '0' or 0
+            // are not silently dropped (fixes CORE-6).
+            const value = paymentRequest[field];
+            if (value !== undefined && value !== null) {
                 params[field] = SanitizationUtil.sanitizeString(
-                    String(paymentRequest[field]),
+                    String(value),
                     100
                 );
             }
@@ -131,15 +139,15 @@ export class PaymentBuilder {
         params: Record<string, any>,
         paymentRequest: PaymentRequest
     ): void {
-        // Use lowercase for both sets so comparison is case-insensitive
-        const standardFields = new Set(STANDARD_PAYMENT_FIELDS.map(f => f.toLowerCase()));
+        // Use pre-computed module-level Set (avoids per-call allocation).
         const existingKeys = new Set(Object.keys(params).map(k => k.toLowerCase()));
 
         for (const [key, value] of Object.entries(paymentRequest)) {
             const lowerKey = key.toLowerCase();
             // Skip if: it's a standard field OR already mapped (even with different casing)
-            if (!standardFields.has(lowerKey) && !existingKeys.has(lowerKey) && value !== undefined && value !== null) {
-                params[key] = String(value);
+            if (!STANDARD_FIELDS_LOWER.has(lowerKey) && !existingKeys.has(lowerKey) && value !== undefined && value !== null) {
+                // Enforce a reasonable max length on custom field values (SEC-2).
+                params[key] = String(value).substring(0, 255);
             }
         }
     }

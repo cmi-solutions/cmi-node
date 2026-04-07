@@ -1,0 +1,35 @@
+# .npmignore
+# Explicitly controls what is EXCLUDED from the published npm tarball.
+# The 'files' field in package.json acts as the allowlist (dist/, README.md, LICENSE).
+# This file adds a clear, auditable deny-list on top of that for safety.
+
+# Source code — consumers get the compiled dist/ only
+src/
+
+# Test suite
+test/
+
+# Build tooling and config — not needed at runtime
+tsup.config.ts
+tsconfig.json
+tsconfig.test.json
+.eslintrc*
+.eslintignore
+.prettierrc*
+prettier.config.*
+
+# CI / project tooling
+.github/
+.gitlab-ci.yml
+Makefile
+
+# Dev artifacts
+*.tgz
+*.log
+coverage/
+.nyc_output/
+
+# Editor config
+.vscode/
+.idea/
+.DS_Store

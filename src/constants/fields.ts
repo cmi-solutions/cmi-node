@@ -73,6 +73,8 @@ export const HASH_SANITIZE_FIELDS = [
     'BillToName',
     'BillToCompany',
     'BillToStreet1',
+    'BillToStreet2',
+    'BillToStreet3',
     'BillToCity',
     'BillToStateProv',
     'BillToPostalCode',

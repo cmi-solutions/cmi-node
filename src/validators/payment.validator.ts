@@ -155,7 +155,7 @@ export class PaymentValidator extends Validator {
 
     // Validate amountCur and symbolCur (must be together)
     const hasAmountCur = request.amountCur !== undefined && request.amountCur > 0;
-    const hasSymbolCur = request.symbolCur !== undefined && request.symbolCur.trim().length > 0;
+    const hasSymbolCur = request.symbolCur !== undefined && typeof request.symbolCur === 'string' && request.symbolCur.trim().length > 0;
 
     if (hasAmountCur !== hasSymbolCur) {
       throw new Error(

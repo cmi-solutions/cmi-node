@@ -15,7 +15,7 @@ import { logger } from "@logger";
  * @example
  * ```typescript
  * import Fastify from 'fastify';
- * import { CMIPaymentGateway, createFastifyHandler } from '@ishakzail/cmi-payment-gateway';
+ * import { CMIPaymentGateway, createFastifyHandler } from 'cmi-node';
  * 
  * const fastify = Fastify();
  * 
@@ -25,7 +25,6 @@ import { logger } from "@logger";
  *   gatewayUrl: process.env.CMI_GATEWAY_URL!,
  *   storetype: '3d_pay_hosting',
  *   trantype: 'PreAuth',
- *   shopUrl: 'https://yoursite.com',
  *   callbackUrl: 'https://yoursite.com/cmi/callback',
  *   confirmationMode: 'auto'
  * });
@@ -68,7 +67,7 @@ export function createFastifyHandler(
  * @example
  * ```typescript
  * import Fastify from 'fastify';
- * import { CMIPaymentGateway, registerFastifyCallback } from '@ishakzail/cmi-payment-gateway';
+ * import { CMIPaymentGateway, registerFastifyCallback } from 'cmi-node';
  * 
  * const fastify = Fastify();
  * const gateway = new CMIPaymentGateway({ ... });

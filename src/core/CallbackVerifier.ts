@@ -26,6 +26,14 @@ export class CallbackVerifier {
     }
 
     /**
+     * Safely parse an amount value, returning 0 if unparseable
+     */
+    private static safeParseAmount(value: any): number {
+        const parsed = parseFloat(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    /**
      * Verify callback from CMI
      *
      * Validates the hash (HASH #2 - Incoming) and returns payment status
@@ -61,15 +69,12 @@ export class CallbackVerifier {
 
             // Verify hash using constant-time comparison (prevents timing attacks)
             if (!timingSafeCompare(receivedHash, calculatedHash)) {
-                // console.warn('[Callback] ❌ Hash mismatch - possible tampering detected!');
                 return {
                     success: false,
                     status: 'FAILURE',
                     message: 'Hash verification failed - possible tampering',
                 };
             }
-
-            // console.debug('[Callback] ✅ Hash verified successfully');
 
             // Extract return code
             const returnCode = String(
@@ -78,8 +83,6 @@ export class CallbackVerifier {
 
             // Check payment status
             if (returnCode === '00') {
-                // console.debug('[Callback] ✅ Payment successful');
-
                 // Get response based on confirmation mode
                 const response = this.getConfirmationResponse();
 
@@ -89,7 +92,7 @@ export class CallbackVerifier {
                     message: 'Payment successful',
                     orderData: {
                         orderId: callbackParams.oid,
-                        amount: parseFloat(callbackParams.amount),
+                        amount: CallbackVerifier.safeParseAmount(callbackParams.amount),
                         currency: callbackParams.currency,
                         transactionId:
                             callbackParams.TransId ||
@@ -98,7 +101,6 @@ export class CallbackVerifier {
                     },
                 };
             } else {
-                // console.warn(`[Callback] ❌ Payment failed with code: ${returnCode}`);
                 return {
                     success: false,
                     status: 'FAILURE',
@@ -107,7 +109,7 @@ export class CallbackVerifier {
                     errorMessage: callbackParams.ErrMsg || callbackParams.errMsg,
                     orderData: {
                         orderId: callbackParams.oid,
-                        amount: parseFloat(callbackParams.amount),
+                        amount: CallbackVerifier.safeParseAmount(callbackParams.amount),
                         currency: callbackParams.currency,
                         transactionId:
                             callbackParams.TransId ||

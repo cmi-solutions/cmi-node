@@ -39,7 +39,8 @@ import { CallbackVerifier } from "./CallbackVerifier";
  * ```
  */
 export class CMIPaymentGateway {
-  private readonly config: PaymentConfig & {
+  // config intentionally does NOT carry storeKey — it lives only in secureStoreKey.
+  private readonly config: Omit<PaymentConfig, 'storeKey'> & {
     confirmationMode?: ConfirmationMode;
   };
 
@@ -74,14 +75,16 @@ export class CMIPaymentGateway {
       config.confirmationMode as string | undefined
     );
 
-    // Store config with validated confirmation mode
+    // Wrap storeKey in SecretString to prevent accidental exposure BEFORE
+    // storing config — storeKey is deliberately excluded from this.config.
+    this.secureStoreKey = new SecretString(normalizedConfig.storeKey);
+
+    // Store config WITHOUT storeKey — the key lives only in secureStoreKey.
+    const { storeKey: _dropped, ...configWithoutKey } = normalizedConfig;
     this.config = {
-      ...normalizedConfig,
+      ...configWithoutKey,
       confirmationMode: normalizedConfirmationMode,
     };
-
-    // Wrap storeKey in SecretString to prevent accidental exposure
-    this.secureStoreKey = new SecretString(config.storeKey);
 
     // Initialize extracted components with SecretString
     this.paymentBuilder = new PaymentBuilder({
@@ -167,12 +170,21 @@ export class CMIPaymentGateway {
         `CMI Payment Gateway: Callback handler auto-registered at POST ${callbackPath}`
       );
       logger.info(
-        `Confirmation Mode: ${this.config.confirmationMode || "auto"}`
+        `Confirmation Mode: ${this.config.confirmationMode ?? "manual"}`
       );
     } catch (error) {
       logger.error(
         "Failed to auto-register Express callback middleware:",
         error
+      );
+      // Re-throw so the caller knows registration silently failed.
+      // A payment callback endpoint that was never registered is a
+      // show-stopping bug — it must not be swallowed.
+      throw new Error(
+        `CMI Payment Gateway: Failed to register callback at POST ${callbackPath}. ` +
+        `Ensure you passed a valid Express app instance. Original error: ${
+          error instanceof Error ? error.message : String(error)
+        }`
       );
     }
   }
@@ -260,8 +272,8 @@ export class CMIPaymentGateway {
    * @returns Configuration object without sensitive data
    */
   getConfig(): Omit<PaymentConfig, 'storeKey'> {
-    const { storeKey: _storeKey, ...safeConfig } = this.config;
-    return safeConfig;
+    // storeKey was never stored in this.config — return as-is.
+    return this.config;
   }
 
 

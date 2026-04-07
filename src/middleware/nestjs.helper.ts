@@ -15,7 +15,7 @@ import { CallbackHandlerOptions, CallbackResult } from "@types";
  * // payment.controller.ts
  * import { Controller, Post, Body, Res } from '@nestjs/common';
  * import { Response } from 'express';
- * import { CMIPaymentGateway, NestJSCallbackHandler } from '@ishakzail/cmi-payment-gateway';
+ * import { CMIPaymentGateway, NestJSCallbackHandler } from 'cmi-node';
  * 
  * @Controller('payment')
  * export class PaymentController {
@@ -28,7 +28,6 @@ import { CallbackHandlerOptions, CallbackResult } from "@types";
  *       gatewayUrl: process.env.CMI_GATEWAY_URL!,
  *       storetype: '3d_pay_hosting',
  *       trantype: 'PreAuth',
- *       shopUrl: 'https://yoursite.com',
  *       callbackUrl: 'https://yoursite.com/payment/callback',
  *       confirmationMode: 'auto'
  *     });
@@ -115,7 +114,7 @@ export class NestJSCallbackHandler {
  * 
  * @example
  * ```typescript
- * import { createNestJSHandler } from '@ishakzail/cmi-payment-gateway';
+ * import { createNestJSHandler } from 'cmi-node';
  * 
  * const handleCallback = createNestJSHandler(gateway, {
  *   onSuccess: async (result) => {

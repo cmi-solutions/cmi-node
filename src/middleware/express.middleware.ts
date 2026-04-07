@@ -12,7 +12,7 @@ import { CallbackHandlerOptions } from "@types";
  * @example
  * ```typescript
  * import express from 'express';
- * import { CMIPaymentGateway, createExpressMiddleware } from '@ishakzail/cmi-payment-gateway';
+ * import { CMIPaymentGateway, createExpressMiddleware } from 'cmi-node';
  * 
  * const app = express();
  * app.use(express.json());

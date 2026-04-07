@@ -23,7 +23,6 @@ import { CallbackHandlerOptions } from "@types";
  *   gatewayUrl: process.env.CMI_GATEWAY_URL!,
  *   storetype: '3d_pay_hosting',
  *   trantype: 'PreAuth',
- *   shopUrl: process.env.NEXT_PUBLIC_SITE_URL!
  * });
  * 
  * export default createNextJsHandler(gateway, {

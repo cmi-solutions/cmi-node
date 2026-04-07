@@ -3,6 +3,9 @@ import { SanitizationUtil } from "@utils";
 import { HASH_SANITIZE_FIELDS } from "@constants/fields";
 import { SecretString } from "./secret-string.util";
 
+// Pre-computed set for hash sanitization (avoids re-creation per call)
+const SANITIZE_FIELD_SET: ReadonlySet<string> = new Set(HASH_SANITIZE_FIELDS);
+
 export class HashUtil {
 
   static generate(params: Record<string, any>, storeKey: string | SecretString): string {
@@ -10,9 +13,6 @@ export class HashUtil {
       const sortedKeys = Object.keys(params).sort((a, b) =>
         a.toLowerCase().localeCompare(b.toLowerCase())
       );
-
-      // Use centralized field definitions
-      const sanitizeFields: Set<string> = new Set(HASH_SANITIZE_FIELDS);
 
       let hashval = "";
 
@@ -22,7 +22,7 @@ export class HashUtil {
           let paramValue = String(params[key] ?? "").trim();
 
           // Apply sanitization to billing fields (CRITICAL)
-          if (sanitizeFields.has(key)) {
+          if (SANITIZE_FIELD_SET.has(key)) {
             paramValue = SanitizationUtil.sanitizeString(paramValue);
           }
 

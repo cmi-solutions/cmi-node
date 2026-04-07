@@ -16,14 +16,18 @@ The `cmi-node` package provides a seamless way to integrate the Centre Monétiqu
 - **Secure by Design**: Built-in hash verification (SHA-512) and timing-safe comparisons.
 - **Flexible Callbacks**: Support for both 'auto' and 'manual' confirmation modes.
 - **Middleware Helpers**: Pre-built helpers for popular frameworks to get you started in minutes.
-- **Zero Dependencies**: Core logic is lightweight and has minimal external dependencies.
+- **No External Runtime Dependencies**: Uses only Node.js built-ins (`crypto`, `buffer`). Requires Node.js ≥ 18.
 
 ---
 
 ## 📦 Installation
 
 ```bash
+# Using npm
 npm install cmi-node
+
+# Using yarn
+yarn add cmi-node
 ```
 
 ---
@@ -31,19 +35,17 @@ npm install cmi-node
 ## 🛠️ Configuration
 
 ```typescript
-import { PaymentConfig } from 'cmi-node';
+import { CMIPaymentGateway } from 'cmi-node';
 
-const config: PaymentConfig = {
-  storeKey: process.env.CMI_STORE_KEY,    // Your CMI Store Key
-  clientId: process.env.CMI_CLIENT_ID,    // Your CMI Client ID
+const gateway = new CMIPaymentGateway({
+  storeKey: process.env.CMI_STORE_KEY!,    // Your CMI Store Key
+  clientId: process.env.CMI_CLIENT_ID!,    // Your CMI Client ID
   gatewayUrl: 'https://testpayment.cmi.co.ma/fim/est3Dgate', // Gateway URL
   storetype: '3d_pay_hosting',
   trantype: 'PreAuth',
-  shopUrl: 'https://yoursite.com',
   callbackUrl: 'https://api.yoursite.com/payment/callback',
-  // Optional: 'auto' | 'manual' (default: 'manual')
-  confirmationMode: 'auto' 
-};
+  confirmationMode: 'auto' // Optional: 'auto' | 'manual' (default: 'manual')
+});
 ```
 
 ---
@@ -67,16 +69,17 @@ app.get('/pay', (req, res) => {
     amount: 100.50,
     BillToName: 'John Doe',
     email: 'john@example.com',
-    oid: 'ORDER_123',
     okUrl: 'https://yoursite.com/success',
     failUrl: 'https://yoursite.com/failure',
+    shopUrl: 'https://yoursite.com',   // required
+    currency: '504',                   // required — MAD numeric code
   });
   
   const form = gateway.generatePaymentForm(params);
   res.send(form);
 });
 
-// Handle Callback (Auto-register route)
+// Handle Callback
 app.post('/payment/callback', createExpressMiddleware(gateway, {
   onSuccess: async (result) => {
     console.log('Payment Successful:', result.orderData);
