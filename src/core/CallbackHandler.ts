@@ -32,7 +32,7 @@ export class CallbackHandler {
     return async (
       req: any,
       res: any,
-      next?: Function
+      next?: (...args: any[]) => any
     ): Promise<void> => {
       try {
         const params = this.extractParams(req);

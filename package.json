@@ -80,7 +80,7 @@
     "prepublishOnly": "npm run clean && npm run build",
     "test": "tsx --test test/gateway.test.ts",
     "test:coverage": "c8 tsx --test test/gateway.test.ts",
-    "lint": "eslint src/**/*.ts",
+    "lint": "eslint \"src/**/*.ts\"",
     "format": "prettier --write \"src/**/*.ts\"",
     "type-check": "tsc --noEmit",
     "build": "tsup",

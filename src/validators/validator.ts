@@ -44,7 +44,7 @@ export class Validator {
     // First, check the raw format is valid
     // Allow: digits, spaces, dashes, parentheses, and optional leading +
     // But must start with + or digit, not with dash/space/parenthesis
-    const formatRegex = /^[\+\d][\d\s\-()]*$/;
+    const formatRegex = /^[+\d][\d\s\-()]*$/;
     if (!formatRegex.test(trimmed)) {
       return false;
     }
