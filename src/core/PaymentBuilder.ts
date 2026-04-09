@@ -63,7 +63,7 @@ export class PaymentBuilder {
             currency: FormatterUtil.formatCurrencyNumeric(String(paymentRequest.currency)),
             storetype: FormatterUtil.formatStoreType(this.config.storetype),
             email: SanitizationUtil.sanitizeEmail(paymentRequest.email),
-            BillToName: SanitizationUtil.sanitizeString(paymentRequest.BillToName, 50),
+            BillToName: SanitizationUtil.sanitizeString(paymentRequest.BillToName, 255),
             lang: normalizeLanguage(paymentRequest.lang || 'fr'),
             okUrl: paymentRequest.okUrl,
             failUrl: paymentRequest.failUrl,
@@ -119,14 +119,28 @@ export class PaymentBuilder {
         params: Record<string, any>,
         paymentRequest: PaymentRequest
     ): void {
+        const fieldLimits: Record<string, number> = {
+            BillToCompany: 255,
+            BillToStreet1: 255,
+            BillToStreet2: 255,
+            BillToStreet3: 255,
+            BillToCity: 64,
+            BillToStateProv: 32,
+            BillToPostalCode: 32,
+            BillToCountry: 3,
+            description: 125,
+            tel: 32,
+        };
+
         for (const field of OPTIONAL_PAYMENT_FIELDS) {
             // Use explicit null/undefined check so falsy values like '0' or 0
             // are not silently dropped (fixes CORE-6).
             const value = paymentRequest[field];
             if (value !== undefined && value !== null) {
+                const limit = fieldLimits[field] || 255; // default to safe 255
                 params[field] = SanitizationUtil.sanitizeString(
                     String(value),
-                    100
+                    limit
                 );
             }
         }

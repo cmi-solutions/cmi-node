@@ -8,7 +8,7 @@ export class SanitizationUtil {
   }
 
   static sanitizeEmail(email: string): string {
-    return email.trim().toLowerCase().substring(0, 100);
+    return email.trim().toLowerCase().substring(0, 64);
   }
 
   static escapeHtml(str: string): string {
