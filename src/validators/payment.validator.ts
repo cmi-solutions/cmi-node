@@ -118,9 +118,15 @@ export class PaymentValidator extends Validator {
     if (!request.email || !this.isValidEmail(request.email)) {
       throw new Error("Valid email is required");
     }
+    if (request.email.length > 64) {
+      throw new Error("email cannot exceed 64 characters");
+    }
 
     if (!request.BillToName || request.BillToName.trim().length === 0) {
       throw new Error("BillToName is required");
+    }
+    if (request.BillToName.length > 255) {
+      throw new Error("BillToName cannot exceed 255 characters");
     }
 
     if (this.hasSpecialCharacters(request.BillToName)) {
@@ -198,6 +204,9 @@ export class PaymentValidator extends Validator {
       ) {
         throw new Error("Invalid phone number format");
       }
+      if (request.tel.length > 32) {
+        throw new Error("tel cannot exceed 32 characters");
+      }
     }
 
     // Validate oid if provided - must be non-empty
@@ -205,12 +214,21 @@ export class PaymentValidator extends Validator {
       if (typeof request.oid !== 'string' || request.oid.trim().length === 0) {
         throw new Error("oid must be a non-empty string when provided");
       }
+      if (request.oid.length > 64) {
+        throw new Error("oid cannot exceed 64 characters");
+      }
     }
 
     // Validate rnd if provided - must be non-empty
     if (request.rnd !== undefined) {
       if (typeof request.rnd !== 'string' || request.rnd.trim().length === 0) {
         throw new Error("rnd must be a non-empty string when provided");
+      }
+      if (request.rnd.length > 20) {
+        throw new Error("rnd cannot exceed 20 characters");
+      }
+      if (!/^[a-zA-Z]+$/.test(request.rnd)) {
+        throw new Error("rnd must be purely alphabetic");
       }
     }
 
@@ -246,15 +264,15 @@ export class PaymentValidator extends Validator {
 
 
     // Validate other billing fields if provided
-    const billingFields: Array<{ key: keyof PaymentRequest; label: string }> = [
-      { key: "BillToCompany", label: "BillToCompany" },
-      { key: "BillToStreet1", label: "BillToStreet1" },
-      { key: "BillToStreet2", label: "BillToStreet2" },
-      { key: "BillToStreet3", label: "BillToStreet3" },
-      { key: "BillToCity", label: "BillToCity" },
-      { key: "BillToStateProv", label: "BillToStateProv" },
-      { key: "BillToPostalCode", label: "BillToPostalCode" },
-      { key: "BillToCountry", label: "BillToCountry" },
+    const billingFields: Array<{ key: keyof PaymentRequest; label: string; maxLen: number }> = [
+      { key: "BillToCompany", label: "BillToCompany", maxLen: 255 },
+      { key: "BillToStreet1", label: "BillToStreet1", maxLen: 255 },
+      { key: "BillToStreet2", label: "BillToStreet2", maxLen: 255 },
+      { key: "BillToStreet3", label: "BillToStreet3", maxLen: 255 },
+      { key: "BillToCity", label: "BillToCity", maxLen: 64 },
+      { key: "BillToStateProv", label: "BillToStateProv", maxLen: 32 },
+      { key: "BillToPostalCode", label: "BillToPostalCode", maxLen: 32 },
+      { key: "BillToCountry", label: "BillToCountry", maxLen: 3 },
     ];
 
     for (const field of billingFields) {
@@ -262,6 +280,9 @@ export class PaymentValidator extends Validator {
       if (value !== undefined && value !== null) {
         if (typeof value !== "string" || value.trim().length === 0) {
           throw new Error(`${field.label} must be a non-empty string`);
+        }
+        if (value.length > field.maxLen) {
+          throw new Error(`${field.label} cannot exceed ${field.maxLen} characters`);
         }
         if (this.hasSpecialCharacters(value)) {
           throw new Error(
