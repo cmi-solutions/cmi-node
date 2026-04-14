@@ -159,6 +159,178 @@ app.post('/cmi/callback', createHonoHandler(gateway, {
 }));
 ```
 
+### 6. Koa
+
+```typescript
+import Koa from 'koa';
+import bodyParser from 'koa-bodyparser';
+import { CMIPaymentGateway } from 'cmi-node';
+
+const app = new Koa();
+app.use(bodyParser());
+
+const gateway = new CMIPaymentGateway(config);
+
+app.use(async (ctx) => {
+  if (ctx.method === 'POST' && ctx.path === '/payment/callback') {
+    const result = gateway.verifyCallback(ctx.request.body);
+
+    if (result.success) {
+      await updateOrder(result.orderData.orderId, 'paid');
+      ctx.status = 200;
+      ctx.body = result.status; // 'ACTION=POSTAUTH' or 'APPROVED'
+    } else {
+      ctx.status = 200;
+      ctx.body = 'FAILURE';
+    }
+  }
+});
+```
+
+---
+
+## 📖 API Reference
+
+### `CMIPaymentGateway`
+
+The main class for interacting with the CMI payment gateway.
+
+#### Constructor
+
+```typescript
+new CMIPaymentGateway(config: PaymentConfig, options?: CMIPaymentGatewayOptions)
+```
+
+#### `PaymentConfig`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `storeKey` | `string` | ✅ | Secret key provided by CMI for hash generation |
+| `clientId` | `string` | ✅ | Numeric Client ID provided by CMI |
+| `gatewayUrl` | `string` | ✅ | CMI gateway URL (must use `http://` or `https://`) |
+| `storetype` | `string` | ✅ | Store type (`3d_pay_hosting`, `3d`, `pay_hosting`, etc.) |
+| `trantype` | `string` | ✅ | Transaction type (`PreAuth`, `Auth`, `PostAuth`, etc.) |
+| `callbackUrl` | `string` | ❌ | Callback URL for payment notifications |
+
+#### `CMIPaymentGatewayOptions`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `app` | `Express` | — | Express app for auto-registration of callback endpoint |
+| `callbackPath` | `string` | `'/api/payment/callback'` | Custom callback endpoint path |
+| `callbackConfig` | `object` | — | Callback handler configuration (see below) |
+| `callbackConfig.onSuccess` | `(result) => void` | — | Called when payment is verified successfully |
+| `callbackConfig.onFailure` | `(result) => void` | — | Called when payment verification fails |
+| `callbackConfig.autoRespond` | `boolean` | `true` | Automatically send response to CMI |
+| `callbackConfig.supportGetMethod` | `boolean` | `false` | Support GET method for callbacks |
+
+---
+
+### `gateway.createPaymentParams(request)`
+
+Creates payment parameters for initiating a payment.
+
+#### `PaymentRequest`
+
+| Field | Type | Required | Max Length | Description |
+|---|---|---|---|---|
+| `amount` | `number \| string` | ✅ | — | Payment amount (≥ 1, formatted to 2 decimal places) |
+| `email` | `string` | ✅ | 64 | Customer email address |
+| `BillToName` | `string` | ✅ | 255 | Customer billing name (alphanumeric + spaces) |
+| `okUrl` | `string` | ✅ | — | Redirect URL on success (must use `http(s)://`) |
+| `failUrl` | `string` | ✅ | — | Redirect URL on failure (must use `http(s)://`) |
+| `shopUrl` | `string` | ✅ | — | Your shop URL (must use `http(s)://`) |
+| `currency` | `string` | ✅ | — | Must be `"504"` or `"MAD"` |
+| `oid` | `string` | ❌ | 64 | Order ID (auto-generated if omitted) |
+| `rnd` | `string` | ❌ | 20 | Random value (auto-generated if omitted, must be alphabetic) |
+| `lang` | `string` | ❌ | — | Language code: `"fr"`, `"en"`, `"ar"`, etc. (default: `"fr"`) |
+| `tel` | `string` | ❌ | 32 | Customer phone number |
+| `description` | `string` | ❌ | 125 | Payment description |
+| `AutoRedirect` | `boolean` | ❌ | — | Auto-redirect after payment (default: `false`) |
+| `hashAlgorithm` | `string` | ❌ | — | Must be `"ver3"` if provided |
+| `encoding` | `string` | ❌ | — | Must be `"UTF-8"` if provided |
+| `amountCur` | `number` | ❌ | — | Display amount in foreign currency (requires `symbolCur`) |
+| `symbolCur` | `string` | ❌ | — | Foreign currency code, e.g. `"840"` for USD (requires `amountCur`) |
+| `BillToCompany` | `string` | ❌ | 255 | Billing company name |
+| `BillToStreet1` | `string` | ❌ | 255 | Billing street address line 1 |
+| `BillToStreet2` | `string` | ❌ | 255 | Billing street address line 2 |
+| `BillToStreet3` | `string` | ❌ | 255 | Billing street address line 3 |
+| `BillToCity` | `string` | ❌ | 64 | Billing city |
+| `BillToStateProv` | `string` | ❌ | 32 | Billing state/province |
+| `BillToPostalCode` | `string` | ❌ | 32 | Billing postal code |
+| `BillToCountry` | `string` | ❌ | 3 | Billing country code |
+
+> **Note:** Custom fields not listed above will be passed through to the gateway. Field names are case-insensitive — `shopUrl`, `SHOPURL`, and `shopurl` all resolve to the same field.
+
+---
+
+### `gateway.generatePaymentForm(params)`
+
+Generates an auto-submitting HTML form for payment submission.
+
+```typescript
+const form = gateway.generatePaymentForm(params);
+// Returns HTML string with all params as hidden inputs
+// Auto-submits via <body onload="...">
+// All values are HTML-escaped to prevent XSS
+```
+
+---
+
+### `gateway.verifyCallback(callbackParams)`
+
+Verifies a callback from the CMI gateway using timing-safe hash comparison.
+
+#### `CallbackResult`
+
+```typescript
+interface CallbackResult {
+  success: boolean;
+  status: 'ACTION=POSTAUTH' | 'APPROVED' | 'FAILURE';
+  message: string;
+  orderData?: {
+    orderId: string | undefined;
+    amount: number;
+    currency: string;
+    transactionId: string;
+  };
+  errorCode?: string;
+  errorMessage?: string;
+}
+```
+
+---
+
+### `gateway.getConfirmationMode()`
+
+Returns the current confirmation mode (`'auto'` or `'manual'`).
+
+### `gateway.getConfig()`
+
+Returns the gateway configuration **without** the `storeKey` (sanitized for safety).
+
+---
+
+## 📋 Logger Configuration
+
+The SDK includes an environment-aware logger. In production (`NODE_ENV=production`), only errors are logged. In development, all levels are shown.
+
+```typescript
+import { configureLogger, resetLogger } from 'cmi-node';
+
+// Set log level
+configureLogger({ level: 'error' }); // 'debug' | 'info' | 'warn' | 'error'
+
+// Disable all logging
+configureLogger({ enabled: false });
+
+// Customize prefix
+configureLogger({ prefix: '[MyApp Payment]' });
+
+// Reset to defaults
+resetLogger();
+```
+
 ---
 
 ## 🔒 Security
@@ -178,6 +350,55 @@ if (result.success) {
 
 ---
 
+## ❓ Troubleshooting
+
+### Hash Mismatch on Callback
+
+**Symptom:** `verifyCallback()` returns `{ success: false, message: 'Hash verification failed' }`
+
+**Common causes:**
+1. **Wrong `storeKey`** — Ensure you're using the exact key provided by CMI (test vs. production).
+2. **Body parser not configured** — `req.body` must be parsed before reaching the callback handler:
+   ```typescript
+   // Express: add BEFORE callback route
+   app.use(express.urlencoded({ extended: true }));
+   ```
+3. **Case-sensitive field names** — The SDK normalizes field casing automatically, but if you're manually constructing params, be consistent.
+
+### "Amount must be greater than or equal to 1"
+
+The CMI gateway requires `amount >= 1`. For sub-unit pricing, multiply to reach the minimum.
+
+### "CMI gateway only accepts MAD"
+
+The `currency` field must be `"504"` (numeric) or `"MAD"`. For foreign currency display, use:
+```typescript
+gateway.createPaymentParams({
+  amount: 100,            // Amount in MAD
+  currency: '504',        // Always MAD
+  amountCur: 10,          // Display amount in foreign currency
+  symbolCur: '840',       // Foreign currency (USD)
+  // ...
+});
+```
+
+### Callback URL Not Reachable in Development
+
+CMI sends callbacks to `callbackUrl` from their servers. `localhost` URLs won't work. Use a tunnel like [ngrok](https://ngrok.com/) for local development:
+```bash
+ngrok http 3000
+# Use the https://*.ngrok.io URL as your callbackUrl
+```
+
+### "Unknown configuration field detected"
+
+The SDK strictly validates configuration fields. Only these fields are accepted:
+`storeKey`, `clientId`, `gatewayUrl`, `storetype`, `trantype`, `callbackUrl`, `confirmationMode`.
+
+Check for typos or extra fields.
+
+---
+
 ## 🧪 Development
 
 ```bash
@@ -190,8 +411,14 @@ npm run build
 # Run tests
 npm test
 
+# Run tests with coverage
+npm run test:coverage
+
 # Linting
 npm run lint
+
+# Format code
+npm run format
 ```
 
 ---

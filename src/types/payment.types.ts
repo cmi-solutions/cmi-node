@@ -35,5 +35,8 @@ export interface PaymentRequest {
   amountCur?: number;
   symbolCur?: string;
 
+  /** @deprecated Use `tel` instead. This field will throw at runtime. */
+  phone?: never;
+
   [key: string]: any;
 }

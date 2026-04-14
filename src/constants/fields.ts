@@ -26,12 +26,16 @@ export type BillingField = typeof BILLING_FIELDS[number];
  * Optional payment request fields (billing + tel)
  */
 export const OPTIONAL_PAYMENT_FIELDS = [
+    'BillToCompany',
+    'BillToStreet1',
+    'BillToStreet2',
+    'BillToStreet3',
     'BillToCity',
     'BillToCountry',
-    'BillToStreet1',
     'BillToStateProv',
     'BillToPostalCode',
     'BillToTelVoice',
+    'description',
     'tel',
 ] as const;
 
