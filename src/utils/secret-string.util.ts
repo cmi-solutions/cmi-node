@@ -18,14 +18,16 @@ import crypto from 'crypto';
  * ```
  */
 export class SecretString {
-    private readonly value: string;
-    private static readonly MASK = '********';
+    // ES2022 hard-private — truly inaccessible at runtime, not just compile-time.
+    // Prevents `(secret as any).value` from leaking the store key.
+    #value: string;
+    static readonly #MASK = '********';
 
     constructor(value: string) {
         if (!value || typeof value !== 'string') {
             throw new Error('SecretString requires a non-empty string value');
         }
-        this.value = value;
+        this.#value = value;
     }
 
     /**
@@ -34,35 +36,35 @@ export class SecretString {
      * @internal
      */
     getValue(): string {
-        return this.value;
+        return this.#value;
     }
 
     /**
      * Returns masked value to prevent accidental logging
      */
     toString(): string {
-        return SecretString.MASK;
+        return SecretString.#MASK;
     }
 
     /**
      * Returns masked value for JSON serialization
      */
     toJSON(): string {
-        return SecretString.MASK;
+        return SecretString.#MASK;
     }
 
     /**
      * Custom inspect for Node.js console.log
      */
     [Symbol.for('nodejs.util.inspect.custom')](): string {
-        return `SecretString(${SecretString.MASK})`;
+        return `SecretString(${SecretString.#MASK})`;
     }
 
     /**
      * Get the length without exposing the value
      */
     get length(): number {
-        return this.value.length;
+        return this.#value.length;
     }
 
     /**
@@ -70,7 +72,7 @@ export class SecretString {
      */
     equals(other: string | SecretString): boolean {
         const otherValue = other instanceof SecretString ? other.getValue() : other;
-        const bufA = Buffer.from(this.value, 'utf8');
+        const bufA = Buffer.from(this.#value, 'utf8');
         const bufB = Buffer.from(otherValue, 'utf8');
 
         if (bufA.length !== bufB.length) {

@@ -79,7 +79,7 @@ export interface CMIPaymentGatewayOptions {
 
         /**
          * Support both POST and GET methods
-         * @default true
+         * @default false
          */
         supportGetMethod?: boolean;
     };

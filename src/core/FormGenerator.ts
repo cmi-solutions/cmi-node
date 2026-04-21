@@ -3,6 +3,12 @@
  * 
  * Generates HTML forms for payment submission to CMI gateway.
  * Extracted from CMIPaymentGateway for Single Responsibility Principle.
+ * 
+ * **CSP Note:** The generated form uses `<body onload="...">` for auto-submission.
+ * If your application enforces a strict Content-Security-Policy that blocks
+ * `'unsafe-inline'` scripts, the auto-submit will be blocked silently.
+ * In that case, use `generateInputs()` to build a custom form with your own
+ * submission logic, or add `'unsafe-inline'` to your CSP for the payment page.
  */
 
 import { SanitizationUtil } from '@utils';

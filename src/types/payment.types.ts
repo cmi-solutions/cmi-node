@@ -32,8 +32,14 @@ export interface PaymentRequest {
   BillToStreet2?: string;
   BillToStreet3?: string;
 
+  /** Payment description (max 125 characters). */
+  description?: string;
+
   amountCur?: number;
   symbolCur?: string;
+
+  /** @deprecated Use `tel` instead. This field will throw at runtime. */
+  phone?: never;
 
   [key: string]: any;
 }

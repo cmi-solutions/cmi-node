@@ -25,13 +25,12 @@ import crypto from 'crypto';
  */
 export function timingSafeCompare(a: string, b: string): boolean {
     try {
-        // Generate a fresh random key for each comparison.
-        // HMAC output is always fixed-length (32 bytes for SHA-256),
-        // so the comparison time is constant regardless of input length.
-        const key = crypto.randomBytes(32);
-        const hmacA = crypto.createHmac('sha256', key).update(a, 'utf8').digest();
-        const hmacB = crypto.createHmac('sha256', key).update(b, 'utf8').digest();
-        return crypto.timingSafeEqual(hmacA, hmacB);
+        // Hash both inputs to fixed-length digests (32 bytes) so that
+        // crypto.timingSafeEqual always receives equal-length buffers,
+        // regardless of the original string lengths.
+        const hashA = crypto.createHash('sha256').update(a, 'utf8').digest();
+        const hashB = crypto.createHash('sha256').update(b, 'utf8').digest();
+        return crypto.timingSafeEqual(hashA, hashB);
     } catch {
         return false;
     }

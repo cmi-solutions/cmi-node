@@ -58,7 +58,7 @@ export interface CallbackHandlerOptions {
 
   /**
    * Support both POST and GET methods (for backward compatibility)
-   * @default true
+   * @default false
    */
   supportGetMethod?: boolean;
 }

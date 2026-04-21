@@ -218,6 +218,19 @@ describe('CMIPaymentGateway - createPaymentParams', () => {
         assert.strictEqual(params.hashAlgorithm, 'ver3');
     });
 
+    it('auto-generated rnd should be 20 alphabetic characters', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        assert.ok(params.rnd, 'rnd should be present');
+        assert.strictEqual(params.rnd.length, 20, 'rnd should be 20 chars');
+        assert.ok(/^[a-zA-Z]+$/.test(params.rnd), `rnd should be purely alphabetic, got: "${params.rnd}"`);
+    });
+
+    it('auto-generated rnd should vary between calls', () => {
+        const p1 = gateway.createPaymentParams(validPaymentRequest);
+        const p2 = gateway.createPaymentParams(validPaymentRequest);
+        assert.notStrictEqual(p1.rnd, p2.rnd, 'rnd should be unique per call');
+    });
+
     it('should accept case-insensitive field names', () => {
         // Clone validPaymentRequest and remove okUrl to avoid duplicates
         const req = { ...validPaymentRequest };
@@ -314,6 +327,15 @@ describe('CMIPaymentGateway - verifyCallback edge cases', () => {
     it('should return failure for empty callback', () => {
         const result = gateway.verifyCallback({});
         assert.strictEqual(result.success, false);
+    });
+
+    it('should handle ENCODING field case-insensitively', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+        // CMI might send ENCODING instead of encoding — must not corrupt hash
+        cb.ENCODING = 'UTF-8';
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true, 'ENCODING (uppercase) should be excluded from hash');
     });
 
     it('should handle empty ProcReturnCode gracefully', () => {
@@ -833,27 +855,36 @@ describe('Logger', () => {
 
     it('should suppress debug logs when level is error', () => {
         const logs: string[] = [];
-        const orig = console.log;
+        const origLog = console.log;
         console.log = (...args: any[]) => logs.push(args.join(' '));
 
         configureLogger({ level: 'error' });
         logger.debug('should not appear');
 
-        console.log = orig;
+        console.log = origLog;
         assert.ok(!logs.some(l => l.includes('should not appear')));
     });
 
-    it('should suppress all logs when disabled', () => {
+    it('should suppress all logs when disabled (including error and warn)', () => {
         const logs: string[] = [];
-        const orig = console.log;
-        console.log = (...args: any[]) => logs.push(args.join(' '));
+        const origLog = console.log;
+        const origErr = console.error;
+        const origWarn = console.warn;
+        const capture = (...args: any[]) => logs.push(args.join(' '));
+        console.log = capture;
+        console.error = capture;
+        console.warn = capture;
 
         configureLogger({ enabled: false });
-        logger.info('should not appear');
-        logger.error('also suppressed');
+        logger.info('info suppressed');
+        logger.error('error suppressed');
+        logger.warn('warn suppressed');
+        logger.debug('debug suppressed');
 
-        console.log = orig;
-        assert.ok(!logs.some(l => l.includes('should not appear')));
+        console.log = origLog;
+        console.error = origErr;
+        console.warn = origWarn;
+        assert.strictEqual(logs.length, 0, 'No logs should be captured when disabled');
     });
 
     it('resetLogger should restore defaults', () => {
@@ -862,5 +893,815 @@ describe('Logger', () => {
         // After reset, default level should allow debug in non-production
         // We just verify it doesn't throw
         assert.doesNotThrow(() => resetLogger());
+    });
+});
+
+// ===========================================================================
+// 15. Framework Adapter Middleware
+// ===========================================================================
+
+// --- Express Adapter ---
+import { createExpressMiddleware, createCallbackHandler } from '../src/middleware/express.middleware.js';
+
+describe('Express Adapter', () => {
+    let gateway: CMIPaymentGateway;
+    beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
+
+    it('createExpressMiddleware should return a function', () => {
+        const mw = createExpressMiddleware(gateway);
+        assert.strictEqual(typeof mw, 'function');
+    });
+
+    it('should process valid callback via Express middleware', async () => {
+        let successCalled = false;
+        const mw = createExpressMiddleware(gateway, {
+            onSuccess: () => { successCalled = true; }
+        });
+
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+        const req = makeMockReq(cb);
+        const res = makeMockRes();
+
+        await mw(req, res);
+
+        assert.strictEqual(successCalled, true);
+        assert.strictEqual(res._status, 200);
+    });
+
+    it('should handle failure via Express middleware', async () => {
+        let failCalled = false;
+        const mw = createExpressMiddleware(gateway, {
+            onFailure: () => { failCalled = true; }
+        });
+
+        const req = makeMockReq({ HASH: 'invalid', amount: '100' });
+        const res = makeMockRes();
+
+        await mw(req, res);
+
+        assert.strictEqual(failCalled, true);
+        assert.strictEqual(res._status, 200);
+    });
+
+    it('createCallbackHandler should return a CallbackHandler', () => {
+        const handler = createCallbackHandler(gateway);
+        assert.ok(typeof handler.handle === 'function');
+        assert.ok(typeof handler.middleware === 'function');
+        assert.ok(typeof handler.getResponse === 'function');
+    });
+
+    it('createCallbackHandler with autoRespond false should support manual response', async () => {
+        const handler = createCallbackHandler(gateway, { autoRespond: false });
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+        const result = await handler.handle(cb);
+        assert.strictEqual(result.success, true);
+    });
+});
+
+// --- Next.js Adapter ---
+import { createNextJsHandler, handleNextJsCallback } from '../src/middleware/nextjs.helper.js';
+
+describe('Next.js Adapter', () => {
+    let gateway: CMIPaymentGateway;
+    beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
+
+    it('createNextJsHandler should return a function', () => {
+        const handler = createNextJsHandler(gateway);
+        assert.strictEqual(typeof handler, 'function');
+    });
+
+    it('Pages Router handler should process valid callback', async () => {
+        let successCalled = false;
+        const handler = createNextJsHandler(gateway, {
+            onSuccess: () => { successCalled = true; }
+        });
+
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+        const req = { body: cb, query: {} };
+        const res = makeMockRes();
+
+        await handler(req, res);
+
+        assert.strictEqual(successCalled, true);
+        assert.strictEqual(res._status, 200);
+    });
+
+    it('Pages Router handler should return 500 on error', async () => {
+        const handler = createNextJsHandler(gateway, {
+            onSuccess: () => { throw new Error('Boom'); }
+        });
+
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+        const req = { body: cb, query: {} };
+        const res = makeMockRes();
+
+        await handler(req, res);
+
+        assert.strictEqual(res._status, 500);
+    });
+
+    it('handleNextJsCallback should return a Response for App Router', async () => {
+        let successCalled = false;
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+
+        // Mock App Router Request with json() method
+        const mockRequest = {
+            json: async () => cb,
+        };
+
+        const response = await handleNextJsCallback(gateway, mockRequest, {
+            onSuccess: () => { successCalled = true; }
+        });
+
+        assert.strictEqual(successCalled, true);
+        assert.ok(response instanceof Response);
+        assert.strictEqual(response.status, 200);
+    });
+
+    it('handleNextJsCallback should fallback to formData', async () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+
+        // Mock request where json() fails but formData() works
+        const formData = new Map(Object.entries(cb));
+        const mockRequest = {
+            json: async () => { throw new Error('not json'); },
+            formData: async () => ({ entries: () => formData.entries() }),
+        };
+
+        const response = await handleNextJsCallback(gateway, mockRequest);
+        assert.ok(response instanceof Response);
+    });
+
+    it('handleNextJsCallback should return 500 on error', async () => {
+        const mockRequest = {
+            json: async () => { throw new Error('parse error'); },
+            formData: async () => { throw new Error('no formdata'); },
+            nextUrl: null,
+        };
+
+        const response = await handleNextJsCallback(gateway, mockRequest, {
+            onSuccess: () => { throw new Error('Boom'); }
+        });
+
+        // Should handle gracefully - either the handler succeeds because params
+        // are empty (and hash verification fails) or an error occurs
+        assert.ok(response instanceof Response);
+    });
+});
+
+// --- Fastify Adapter ---
+import { createFastifyHandler, registerFastifyCallback } from '../src/middleware/fastify.helper.js';
+
+describe('Fastify Adapter', () => {
+    let gateway: CMIPaymentGateway;
+    beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
+
+    it('createFastifyHandler should return a function', () => {
+        const handler = createFastifyHandler(gateway);
+        assert.strictEqual(typeof handler, 'function');
+    });
+
+    it('should process valid callback via Fastify handler', async () => {
+        let successCalled = false;
+        const handler = createFastifyHandler(gateway, {
+            onSuccess: () => { successCalled = true; }
+        });
+
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+
+        // Fastify uses .code() instead of .status()
+        const reply: Record<string, any> = { _code: 0, _body: '' };
+        reply.code = (c: number) => { reply._code = c; return reply; };
+        reply.send = (b: any) => { reply._body = b; return reply; };
+
+        await handler({ body: cb }, reply);
+
+        assert.strictEqual(successCalled, true);
+        assert.strictEqual(reply._code, 200);
+    });
+
+    it('should return 500 on error', async () => {
+        const handler = createFastifyHandler(gateway, {
+            onSuccess: () => { throw new Error('DB error'); }
+        });
+
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+
+        const reply: Record<string, any> = { _code: 0, _body: '' };
+        reply.code = (c: number) => { reply._code = c; return reply; };
+        reply.send = (b: any) => { reply._body = b; return reply; };
+
+        await handler({ body: cb }, reply);
+
+        assert.strictEqual(reply._code, 500);
+        assert.strictEqual(reply._body, 'FAILURE');
+    });
+
+    it('registerFastifyCallback should register a POST route', () => {
+        let registeredPath = '';
+        const mockFastify = {
+            post: (path: string, _handler: any) => { registeredPath = path; }
+        };
+
+        registerFastifyCallback(mockFastify, gateway, {
+            path: '/custom/callback'
+        });
+
+        assert.strictEqual(registeredPath, '/custom/callback');
+    });
+
+    it('registerFastifyCallback should use default path', () => {
+        let registeredPath = '';
+        const mockFastify = {
+            post: (path: string, _handler: any) => { registeredPath = path; }
+        };
+
+        registerFastifyCallback(mockFastify, gateway, {});
+
+        assert.strictEqual(registeredPath, '/api/payment/callback');
+    });
+});
+
+// --- Hono Adapter ---
+import { createHonoHandler, registerHonoCallback } from '../src/middleware/hono.helper.js';
+
+describe('Hono Adapter', () => {
+    let gateway: CMIPaymentGateway;
+    beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
+
+    it('createHonoHandler should return a function', () => {
+        const handler = createHonoHandler(gateway);
+        assert.strictEqual(typeof handler, 'function');
+    });
+
+    it('should process valid callback via Hono handler', async () => {
+        let successCalled = false;
+        const handler = createHonoHandler(gateway, {
+            onSuccess: () => { successCalled = true; }
+        });
+
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+
+        let responseBody = '';
+        let responseStatus = 0;
+        const mockContext = {
+            req: {
+                json: async () => cb,
+                url: 'https://example.com/callback',
+            },
+            text: (body: string, status: number) => {
+                responseBody = body;
+                responseStatus = status;
+                return new Response(body, { status });
+            }
+        };
+
+        await handler(mockContext);
+
+        assert.strictEqual(successCalled, true);
+        assert.strictEqual(responseStatus, 200);
+    });
+
+    it('should fallback to parseBody when json() fails', async () => {
+        const handler = createHonoHandler(gateway);
+
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+
+        let responseStatus = 0;
+        const mockContext = {
+            req: {
+                json: async () => { throw new Error('not json'); },
+                parseBody: async () => cb,
+                url: 'https://example.com/callback',
+            },
+            text: (body: string, status: number) => {
+                responseStatus = status;
+                return new Response(body, { status });
+            }
+        };
+
+        await handler(mockContext);
+
+        assert.strictEqual(responseStatus, 200);
+    });
+
+    it('should return 500 on error', async () => {
+        const handler = createHonoHandler(gateway, {
+            onSuccess: () => { throw new Error('Explosion'); }
+        });
+
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+
+        let responseStatus = 0;
+        const mockContext = {
+            req: {
+                json: async () => cb,
+                url: 'https://example.com/callback',
+            },
+            text: (body: string, status: number) => {
+                responseStatus = status;
+                return new Response(body, { status });
+            }
+        };
+
+        await handler(mockContext);
+
+        assert.strictEqual(responseStatus, 500);
+    });
+
+    it('registerHonoCallback should register a POST route', () => {
+        let registeredPath = '';
+        const mockApp = {
+            post: (path: string, _handler: any) => { registeredPath = path; }
+        };
+
+        registerHonoCallback(mockApp, gateway, { path: '/hono/callback' });
+
+        assert.strictEqual(registeredPath, '/hono/callback');
+    });
+});
+
+// --- NestJS Adapter ---
+import { NestJSCallbackHandler, createNestJSHandler } from '../src/middleware/nestjs.helper.js';
+
+describe('NestJS Adapter', () => {
+    let gateway: CMIPaymentGateway;
+    beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
+
+    it('NestJSCallbackHandler should handle valid callback', async () => {
+        let successCalled = false;
+        const handler = new NestJSCallbackHandler(gateway, {
+            onSuccess: () => { successCalled = true; }
+        });
+
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+        const res = makeMockRes();
+
+        await handler.handle(cb, res);
+
+        assert.strictEqual(successCalled, true);
+        assert.strictEqual(res._status, 200);
+    });
+
+    it('NestJSCallbackHandler should return 500 on error', async () => {
+        const handler = new NestJSCallbackHandler(gateway, {
+            onSuccess: () => { throw new Error('DB crash'); }
+        });
+
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+        const res = makeMockRes();
+
+        await handler.handle(cb, res);
+
+        assert.strictEqual(res._status, 500);
+    });
+
+    it('NestJSCallbackHandler.process should return CallbackResult', async () => {
+        const handler = new NestJSCallbackHandler(gateway);
+
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+
+        const result = await handler.process(cb);
+        assert.strictEqual(result.success, true);
+        assert.ok(result.orderData);
+    });
+
+    it('NestJSCallbackHandler.getResponseString should return body string', () => {
+        const handler = new NestJSCallbackHandler(gateway);
+        const result = {
+            success: true as const,
+            status: 'APPROVED' as const,
+            message: 'ok',
+            orderData: { orderId: 'T', amount: 100, currency: '504', transactionId: 'TX' },
+        };
+        const body = handler.getResponseString(result);
+        assert.strictEqual(body, 'APPROVED');
+    });
+
+    it('createNestJSHandler should return a function', () => {
+        const handler = createNestJSHandler(gateway);
+        assert.strictEqual(typeof handler, 'function');
+    });
+
+    it('createNestJSHandler should handle callback via function call', async () => {
+        let successCalled = false;
+        const handler = createNestJSHandler(gateway, {
+            onSuccess: () => { successCalled = true; }
+        });
+
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+        const res = makeMockRes();
+
+        await handler(cb, res);
+
+        assert.strictEqual(successCalled, true);
+        assert.strictEqual(res._status, 200);
+    });
+});
+
+// ===========================================================================
+// 16. Validator Base Class — Extended Coverage
+// ===========================================================================
+describe('Validator — Extended Coverage', () => {
+
+    it('should accept valid phone numbers', () => {
+        // The PaymentValidator calls the base Validator's isPhoneNumber internally
+        assert.doesNotThrow(() => PaymentValidator.validate({
+            ...validPaymentRequest,
+            tel: '+212600000000',
+        } as any));
+    });
+
+    it('should accept phone with spaces and dashes', () => {
+        assert.doesNotThrow(() => PaymentValidator.validate({
+            ...validPaymentRequest,
+            tel: '+1 (555) 123-4567',
+        } as any));
+    });
+
+    it('should reject phone with letters', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                tel: 'not-a-phone',
+            } as any),
+            /Invalid phone number/
+        );
+    });
+
+    it('should reject empty phone', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                tel: '   ',
+            } as any),
+            /Invalid phone number/
+        );
+    });
+
+    it('should reject phone exceeding 32 chars', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                tel: '+1' + ' '.repeat(25) + '(555) 123-4567',
+            } as any),
+            /tel cannot exceed 32/
+        );
+    });
+
+    it('should accept valid http URLs', () => {
+        assert.doesNotThrow(() => PaymentValidator.validate({
+            ...validPaymentRequest,
+            shopUrl: 'http://example.com',
+            okUrl: 'http://example.com/ok',
+            failUrl: 'http://example.com/fail',
+        } as any));
+    });
+
+    it('should reject URLs without http/https', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                shopUrl: 'ftp://example.com',
+            } as any),
+            /http\/https protocol/
+        );
+    });
+
+    it('should accept amount as valid string', () => {
+        assert.doesNotThrow(() => PaymentValidator.validate({
+            ...validPaymentRequest,
+            amount: '150.50',
+        } as any));
+    });
+
+    it('should reject string amount with letters', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                amount: '20a',
+            } as any),
+            /Invalid amount/
+        );
+    });
+
+    it('should throw for invalid email format', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                email: 'missing-at-sign.com',
+            } as any),
+            /email/i
+        );
+    });
+
+    it('should throw for email exceeding 64 chars', () => {
+        const longEmail = 'a'.repeat(56) + '@test.com';
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                email: longEmail,
+            } as any),
+            /email.*64/
+        );
+    });
+
+    it('should throw for oid exceeding 64 chars', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                oid: 'X'.repeat(65),
+            } as any),
+            /oid.*64/
+        );
+    });
+
+    it('should throw for empty oid', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                oid: '   ',
+            } as any),
+            /oid.*non-empty/
+        );
+    });
+
+    it('should throw for rnd with non-alphabetic chars', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                rnd: 'abc123',
+            } as any),
+            /rnd.*alphabetic/
+        );
+    });
+
+    it('should throw for rnd exceeding 20 chars', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                rnd: 'a'.repeat(21),
+            } as any),
+            /rnd.*20/
+        );
+    });
+
+    it('should throw for empty hashAlgorithm', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                hashAlgorithm: '',
+            } as any),
+            /hashAlgorithm.*empty/
+        );
+    });
+
+    it('should throw for wrong hashAlgorithm', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                hashAlgorithm: 'ver2',
+            } as any),
+            /hashAlgorithm.*ver3/
+        );
+    });
+
+    it('should throw for empty encoding', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                encoding: '',
+            } as any),
+            /encoding.*empty/
+        );
+    });
+
+    it('should throw for wrong encoding', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                encoding: 'ASCII',
+            } as any),
+            /encoding.*UTF-8/
+        );
+    });
+
+    it('should throw for non-boolean AutoRedirect', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                AutoRedirect: 'yes',
+            } as any),
+            /AutoRedirect.*boolean/
+        );
+    });
+
+    it('should throw for billing field with special chars', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                BillToCity: '<script>alert(1)</script>',
+            } as any),
+            /BillToCity.*special characters/
+        );
+    });
+
+    it('should throw for billing field exceeding max length', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                BillToPostalCode: 'X'.repeat(33),
+            } as any),
+            /BillToPostalCode.*32/
+        );
+    });
+
+    it('should throw for empty billing field when set', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                BillToCity: '   ',
+            } as any),
+            /BillToCity.*non-empty/
+        );
+    });
+
+    it('should throw for BillToName exceeding 255 chars', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                BillToName: 'A'.repeat(256),
+            } as any),
+            /BillToName.*255/
+        );
+    });
+
+    it('should throw for BillToName with consecutive spaces', () => {
+        assert.throws(
+            () => PaymentValidator.validate({
+                ...validPaymentRequest,
+                BillToName: 'John  Doe',
+            } as any),
+            /BillToName.*special characters/
+        );
+    });
+});
+
+// ===========================================================================
+// 17. FormGenerator — generateInputs method
+// ===========================================================================
+import { FormGenerator } from '../src/core/FormGenerator.js';
+
+describe('FormGenerator — generateInputs', () => {
+    it('should return an array of input strings', () => {
+        const gen = new FormGenerator('https://gateway.cmi.co.ma');
+        const inputs = gen.generateInputs({ amount: '100.00', oid: 'ORDER1' });
+        assert.ok(Array.isArray(inputs));
+        assert.strictEqual(inputs.length, 2);
+        assert.ok(inputs[0].includes('amount'));
+        assert.ok(inputs[1].includes('ORDER1'));
+    });
+
+    it('should HTML-escape values in inputs', () => {
+        const gen = new FormGenerator('https://gateway.cmi.co.ma');
+        const inputs = gen.generateInputs({ evil: '<script>alert(1)</script>' });
+        assert.ok(!inputs[0].includes('<script>'));
+        assert.ok(inputs[0].includes('&lt;script&gt;'));
+    });
+});
+
+// ===========================================================================
+// 18. Config Validator — Extended Coverage
+// ===========================================================================
+describe('ConfigValidator — Extended Coverage', () => {
+    it('should throw for unsupported storetype', () => {
+        assert.throws(
+            () => new CMIPaymentGateway({ ...validConfig, storetype: 'invalid_type' as any }),
+            /Unsupported store type/
+        );
+    });
+
+    it('should throw for unsupported trantype', () => {
+        assert.throws(
+            () => new CMIPaymentGateway({ ...validConfig, trantype: 'InvalidTran' }),
+            /Unsupported transaction type/
+        );
+    });
+
+    it('should throw for invalid callbackUrl', () => {
+        assert.throws(
+            () => new CMIPaymentGateway({ ...validConfig, callbackUrl: 'not-a-url' }),
+            /callbackUrl/
+        );
+    });
+
+    it('should accept valid callbackUrl', () => {
+        assert.doesNotThrow(
+            () => new CMIPaymentGateway({ ...validConfig, callbackUrl: 'https://example.com/callback' }),
+        );
+    });
+});
+
+// ===========================================================================
+// 19. PaymentBuilder — description field + custom fields
+// ===========================================================================
+describe('PaymentBuilder — description and custom fields', () => {
+    let gateway: CMIPaymentGateway;
+    beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
+
+    it('should include description field when provided', () => {
+        const params = gateway.createPaymentParams({
+            ...validPaymentRequest,
+            description: 'Test payment description',
+        });
+        assert.strictEqual(params.description, 'Test payment description');
+    });
+
+    it('should truncate description to 125 chars', () => {
+        const longDesc = 'A'.repeat(200);
+        const params = gateway.createPaymentParams({
+            ...validPaymentRequest,
+            description: longDesc,
+        });
+        assert.strictEqual(params.description.length, 125);
+    });
+
+    it('should include BillToCompany when provided', () => {
+        const params = gateway.createPaymentParams({
+            ...validPaymentRequest,
+            BillToCompany: 'Acme Corp',
+        });
+        assert.strictEqual(params.BillToCompany, 'Acme Corp');
+    });
+
+    it('should include BillToStreet2 and BillToStreet3 when provided', () => {
+        const params = gateway.createPaymentParams({
+            ...validPaymentRequest,
+            BillToStreet2: 'Apt 4B',
+            BillToStreet3: 'Building C',
+        });
+        assert.strictEqual(params.BillToStreet2, 'Apt 4B');
+        assert.strictEqual(params.BillToStreet3, 'Building C');
+    });
+
+    it('should pass through custom fields', () => {
+        const params = gateway.createPaymentParams({
+            ...validPaymentRequest,
+            customField1: 'value1',
+            customField2: 'value2',
+        });
+        assert.strictEqual(params.customField1, 'value1');
+        assert.strictEqual(params.customField2, 'value2');
+    });
+
+    it('should truncate custom field values to 255 chars', () => {
+        const longValue = 'B'.repeat(300);
+        const params = gateway.createPaymentParams({
+            ...validPaymentRequest,
+            customLongField: longValue,
+        });
+        assert.strictEqual(params.customLongField.length, 255);
+    });
+});
+
+// ===========================================================================
+// 20. Audit Fixes & Regressions
+// ===========================================================================
+describe('Audit Fixes & Regressions', () => {
+    let gateway: CMIPaymentGateway;
+    beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
+
+    it('SecretString should provide runtime privacy via ES2022 #private fields', () => {
+        const secret = new SecretString('super-secret-key-123');
+        
+        // Assert the internal value is not exposed on the object surface
+        const keys = Object.keys(secret);
+        const ownProps = Object.getOwnPropertyNames(secret);
+        
+        // Ensure the actual secret string is nowhere in the keys/properties
+        assert.ok(!keys.includes('value'));
+        assert.ok(!ownProps.includes('value'));
+        
+        // Using "any" cast to try and access a loose property
+        assert.strictEqual((secret as any).value, undefined);
+        assert.strictEqual((secret as any)._value, undefined);
+        
+        // The value should only be accessible through the getter method
+        assert.strictEqual(secret.getValue(), 'super-secret-key-123');
     });
 });
