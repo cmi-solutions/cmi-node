@@ -7,6 +7,7 @@ import {
   CallbackResult,
   CallbackMiddleware,
 } from "@types";
+import { logger } from "@logger";
 
 /**
  * Framework‑agnostic callback handling.
@@ -51,6 +52,7 @@ export class CallbackHandler {
           next();
         }
       } catch (error) {
+        logger.error('Callback handler error:', error);
         if (this.options.autoRespond) {
           (res as CallbackResponse).status(500).send("FAILURE");
         } else if (next) {

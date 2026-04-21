@@ -218,6 +218,19 @@ describe('CMIPaymentGateway - createPaymentParams', () => {
         assert.strictEqual(params.hashAlgorithm, 'ver3');
     });
 
+    it('auto-generated rnd should be 20 alphabetic characters', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        assert.ok(params.rnd, 'rnd should be present');
+        assert.strictEqual(params.rnd.length, 20, 'rnd should be 20 chars');
+        assert.ok(/^[a-zA-Z]+$/.test(params.rnd), `rnd should be purely alphabetic, got: "${params.rnd}"`);
+    });
+
+    it('auto-generated rnd should vary between calls', () => {
+        const p1 = gateway.createPaymentParams(validPaymentRequest);
+        const p2 = gateway.createPaymentParams(validPaymentRequest);
+        assert.notStrictEqual(p1.rnd, p2.rnd, 'rnd should be unique per call');
+    });
+
     it('should accept case-insensitive field names', () => {
         // Clone validPaymentRequest and remove okUrl to avoid duplicates
         const req = { ...validPaymentRequest };

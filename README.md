@@ -30,6 +30,24 @@ npm install cmi-node
 yarn add cmi-node
 ```
 
+### Subpath Imports (Recommended)
+
+For optimal bundle size, import framework adapters from their dedicated subpath:
+
+```typescript
+// Core — always available
+import { CMIPaymentGateway } from 'cmi-node';
+
+// Framework adapters — import only what you need
+import { createExpressMiddleware } from 'cmi-node/express';
+import { handleNextJsCallback } from 'cmi-node/nextjs';
+import { createFastifyHandler } from 'cmi-node/fastify';
+import { createHonoHandler } from 'cmi-node/hono';
+import { NestJSCallbackHandler } from 'cmi-node/nestjs';
+```
+
+> **Note:** All adapters are also re-exported from the main `'cmi-node'` entry for convenience, but using subpath imports avoids loading adapters you don't need.
+
 ---
 
 ## 🛠️ Configuration

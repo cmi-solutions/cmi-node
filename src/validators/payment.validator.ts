@@ -35,6 +35,7 @@ export class PaymentValidator extends Validator {
     'billtostreet3':    'BillToStreet3',
     'amountcur':        'amountCur',
     'symbolcur':        'symbolCur',
+    'description':      'description',
   };
 
   /**

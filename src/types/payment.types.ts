@@ -32,6 +32,9 @@ export interface PaymentRequest {
   BillToStreet2?: string;
   BillToStreet3?: string;
 
+  /** Payment description (max 125 characters). */
+  description?: string;
+
   amountCur?: number;
   symbolCur?: string;
 

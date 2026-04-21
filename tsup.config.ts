@@ -18,7 +18,7 @@ export default defineConfig({
     dts: true,
     clean: true,
     sourcemap: true,
-    splitting: false,
+    splitting: true,
     outDir: 'dist',
     target: 'es2020',
     // tsup uses esbuild which resolves tsconfig paths automatically
