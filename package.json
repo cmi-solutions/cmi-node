@@ -114,7 +114,6 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "packageManager": "npm@10.9.2",
   "devDependencies": {
     "@types/node": "^20.19.24",
     "@typescript-eslint/eslint-plugin": "^6.19.0",
@@ -131,10 +130,20 @@
     "provenance": true
   },
   "peerDependenciesMeta": {
-    "express": { "optional": true },
-    "fastify": { "optional": true },
-    "hono": { "optional": true },
-    "@nestjs/common": { "optional": true },
-    "next": { "optional": true }
+    "express": {
+      "optional": true
+    },
+    "fastify": {
+      "optional": true
+    },
+    "hono": {
+      "optional": true
+    },
+    "@nestjs/common": {
+      "optional": true
+    },
+    "next": {
+      "optional": true
+    }
   }
 }

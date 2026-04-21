@@ -9,8 +9,6 @@ Thank you for considering contributing to `cmi-node`! This document outlines the
 3. **Install** dependencies: `npm install`
 4. **Create** a feature branch: `git checkout -b feature/your-feature`
 
-> **Note:** This repository uses the `"packageManager"` field in `package.json` to enforce **npm** via [Corepack](https://nodejs.org/api/corepack.html). If you use Yarn Berry, Corepack will prompt you to switch to npm. All CI pipelines and publish workflows use npm.
-
 ## Development
 
 ```bash
