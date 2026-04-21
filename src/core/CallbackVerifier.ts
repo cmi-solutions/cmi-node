@@ -56,11 +56,14 @@ export class CallbackVerifier {
                 };
             }
 
-            // Prepare params for hash verification (remove hash and encoding)
-            const paramsForHash = { ...callbackParams };
-            delete paramsForHash.HASH;
-            delete paramsForHash.hash;
-            delete paramsForHash.encoding;
+            // Prepare params for hash verification (remove hash and encoding, case-insensitively)
+            const paramsForHash: Record<string, any> = {};
+            for (const [key, value] of Object.entries(callbackParams)) {
+                const lowerKey = key.toLowerCase();
+                if (lowerKey !== 'hash' && lowerKey !== 'encoding') {
+                    paramsForHash[key] = value;
+                }
+            }
 
             // Recalculate hash (HASH #2 - Verify)
             const calculatedHash = HashUtil.generate(paramsForHash, this.config.storeKey);

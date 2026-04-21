@@ -329,6 +329,15 @@ describe('CMIPaymentGateway - verifyCallback edge cases', () => {
         assert.strictEqual(result.success, false);
     });
 
+    it('should handle ENCODING field case-insensitively', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+        // CMI might send ENCODING instead of encoding — must not corrupt hash
+        cb.ENCODING = 'UTF-8';
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true, 'ENCODING (uppercase) should be excluded from hash');
+    });
+
     it('should handle empty ProcReturnCode gracefully', () => {
         const params = gateway.createPaymentParams(validPaymentRequest);
         const cb = simulateCMICallback(params, validConfig.storeKey, { ProcReturnCode: '' });
@@ -846,27 +855,36 @@ describe('Logger', () => {
 
     it('should suppress debug logs when level is error', () => {
         const logs: string[] = [];
-        const orig = console.log;
+        const origLog = console.log;
         console.log = (...args: any[]) => logs.push(args.join(' '));
 
         configureLogger({ level: 'error' });
         logger.debug('should not appear');
 
-        console.log = orig;
+        console.log = origLog;
         assert.ok(!logs.some(l => l.includes('should not appear')));
     });
 
-    it('should suppress all logs when disabled', () => {
+    it('should suppress all logs when disabled (including error and warn)', () => {
         const logs: string[] = [];
-        const orig = console.log;
-        console.log = (...args: any[]) => logs.push(args.join(' '));
+        const origLog = console.log;
+        const origErr = console.error;
+        const origWarn = console.warn;
+        const capture = (...args: any[]) => logs.push(args.join(' '));
+        console.log = capture;
+        console.error = capture;
+        console.warn = capture;
 
         configureLogger({ enabled: false });
-        logger.info('should not appear');
-        logger.error('also suppressed');
+        logger.info('info suppressed');
+        logger.error('error suppressed');
+        logger.warn('warn suppressed');
+        logger.debug('debug suppressed');
 
-        console.log = orig;
-        assert.ok(!logs.some(l => l.includes('should not appear')));
+        console.log = origLog;
+        console.error = origErr;
+        console.warn = origWarn;
+        assert.strictEqual(logs.length, 0, 'No logs should be captured when disabled');
     });
 
     it('resetLogger should restore defaults', () => {
@@ -1658,5 +1676,32 @@ describe('PaymentBuilder — description and custom fields', () => {
             customLongField: longValue,
         });
         assert.strictEqual(params.customLongField.length, 255);
+    });
+});
+
+// ===========================================================================
+// 20. Audit Fixes & Regressions
+// ===========================================================================
+describe('Audit Fixes & Regressions', () => {
+    let gateway: CMIPaymentGateway;
+    beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
+
+    it('SecretString should provide runtime privacy via ES2022 #private fields', () => {
+        const secret = new SecretString('super-secret-key-123');
+        
+        // Assert the internal value is not exposed on the object surface
+        const keys = Object.keys(secret);
+        const ownProps = Object.getOwnPropertyNames(secret);
+        
+        // Ensure the actual secret string is nowhere in the keys/properties
+        assert.ok(!keys.includes('value'));
+        assert.ok(!ownProps.includes('value'));
+        
+        // Using "any" cast to try and access a loose property
+        assert.strictEqual((secret as any).value, undefined);
+        assert.strictEqual((secret as any)._value, undefined);
+        
+        // The value should only be accessible through the getter method
+        assert.strictEqual(secret.getValue(), 'super-secret-key-123');
     });
 });

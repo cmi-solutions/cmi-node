@@ -10,11 +10,11 @@ export class GeneratorUtil {
   static generateRandom(): string {
     // Must produce purely alphabetic characters (a-zA-Z) to satisfy
     // the CMI `rnd` field constraints (max 20 chars, alphabetic only).
+    // Uses crypto.randomInt for unbiased uniform distribution.
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const bytes = crypto.randomBytes(20);
     let result = '';
     for (let i = 0; i < 20; i++) {
-      result += chars[bytes[i] % chars.length];
+      result += chars[crypto.randomInt(chars.length)];
     }
     return result;
   }

@@ -20,6 +20,6 @@ export default defineConfig({
     sourcemap: true,
     splitting: true,
     outDir: 'dist',
-    target: 'es2020',
+    target: 'es2022',
     // tsup uses esbuild which resolves tsconfig paths automatically
 });

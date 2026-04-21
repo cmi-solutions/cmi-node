@@ -39,17 +39,27 @@ export class CallbackHandler {
         const params = this.extractParams(req);
         const result: CallbackResult = this.gateway.verifyCallback(params);
 
-        if (result.success) {
-          await Promise.resolve(this.options.onSuccess(result));
-        } else {
-          await Promise.resolve(this.options.onFailure(result));
-        }
-
+        // IMPORTANT: Send the response to CMI FIRST, based solely on the
+        // verification result.  If we let consumer callbacks run first,
+        // a throw inside onSuccess would cause a 500 FAILURE response
+        // even though the payment was legitimately verified.
         if (this.options.autoRespond) {
           this.sendResponse(res as CallbackResponse, result);
         } else if (next) {
           (req as any).paymentResult = result;
           next();
+        }
+
+        // Invoke consumer callbacks AFTER the response is committed.
+        // Errors here are logged but do NOT change the response.
+        try {
+          if (result.success) {
+            await Promise.resolve(this.options.onSuccess(result));
+          } else {
+            await Promise.resolve(this.options.onFailure(result));
+          }
+        } catch (callbackError) {
+          logger.error('User callback error (response already sent):', callbackError);
         }
       } catch (error) {
         logger.error('Callback handler error:', error);

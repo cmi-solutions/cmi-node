@@ -129,5 +129,12 @@
   "publishConfig": {
     "access": "public",
     "provenance": true
+  },
+  "peerDependenciesMeta": {
+    "express": { "optional": true },
+    "fastify": { "optional": true },
+    "hono": { "optional": true },
+    "@nestjs/common": { "optional": true },
+    "next": { "optional": true }
   }
 }

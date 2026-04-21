@@ -26,9 +26,11 @@ The `cmi-node` package provides a seamless way to integrate the Centre Monétiqu
 # Using npm
 npm install cmi-node
 
-# Using yarn
+# Using yarn (Classic or Berry)
 yarn add cmi-node
 ```
+
+> **Yarn Berry / PnP:** This package has zero runtime dependencies and correct `exports` maps, so it works out of the box with Yarn Berry's Plug'n'Play resolution. No special configuration is needed.
 
 ### Subpath Imports (Recommended)
 
@@ -227,7 +229,7 @@ new CMIPaymentGateway(config: PaymentConfig, options?: CMIPaymentGatewayOptions)
 | `clientId` | `string` | ✅ | Numeric Client ID provided by CMI |
 | `gatewayUrl` | `string` | ✅ | CMI gateway URL (must use `http://` or `https://`) |
 | `storetype` | `string` | ✅ | Store type (`3d_pay_hosting`, `3d`, `pay_hosting`, etc.) |
-| `trantype` | `string` | ✅ | Transaction type (`PreAuth`, `Auth`, `PostAuth`, etc.) |
+| `trantype` | `string` | ✅ | Transaction type (case-insensitive: `preauth`, `auth`, `postauth`, `void`, `credit`) |
 | `callbackUrl` | `string` | ❌ | Callback URL for payment notifications |
 
 #### `CMIPaymentGatewayOptions`
@@ -240,7 +242,9 @@ new CMIPaymentGateway(config: PaymentConfig, options?: CMIPaymentGatewayOptions)
 | `callbackConfig.onSuccess` | `(result) => void` | — | Called when payment is verified successfully |
 | `callbackConfig.onFailure` | `(result) => void` | — | Called when payment verification fails |
 | `callbackConfig.autoRespond` | `boolean` | `true` | Automatically send response to CMI |
-| `callbackConfig.supportGetMethod` | `boolean` | `false` | Support GET method for callbacks |
+| `callbackConfig.supportGetMethod` | `boolean` | `false` | Support GET method for callbacks ⚠️ |
+
+> ⚠️ **Security Warning:** Enabling `supportGetMethod` causes callback parameters (including `HASH` and payment data) to be read from query strings. Query strings are logged in server access logs, browser history, proxy caches, and CDN logs. Only enable this if your gateway requires it, and ensure your infrastructure does not log query parameters.
 
 ---
 
