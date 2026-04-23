@@ -1,4 +1,4 @@
-import { isSupportedLanguage } from "@constants";
+import { isSupportedLanguage, AccountTypeValue } from "@constants";
 import { isSupportedCurrency, isMoroccanDirham } from "@constants/currencies";
 import { PaymentRequest } from "@types";
 import { Validator } from "@validators";
@@ -64,7 +64,7 @@ export class PaymentValidator extends Validator {
     return normalized as PaymentRequest;
   }
 
-  static validate(request: PaymentRequest): void {
+  static validate(request: PaymentRequest, accountType: AccountTypeValue = 'inshore'): void {
     // Check for duplicate/conflicting field names (case-insensitive)
     this.checkDuplicateFields(request);
 
@@ -135,22 +135,26 @@ export class PaymentValidator extends Validator {
       );
     }
 
-
-    // Currency must be MAD for CMI (using centralized function)
+    // Currency Rules based on Account Type
     const isMAD = isMoroccanDirham(request.currency);
 
-    // Check if currency is MAD (either "MAD" or "504")
-    if (!isMAD) {
-      throw new Error(
-        `CMI gateway only accepts MAD as the processing currency.\n` +
-        `Use currency: "504" or "MAD".\n` +
-        `For multi-currency display, use amountCur and symbolCur fields.\n` +
-        `Example:\n` +
-        `  amount: 100 (in MAD)\n` +
-        `  currency: "504"\n` +
-        `  amountCur: 10 (customer sees this)\n` +
-        `  symbolCur: "840" (USD)`
-      );
+    if (accountType === 'inshore') {
+        // Inshore accounts ONLY accept MAD as processing currency
+        if (!isMAD) {
+            throw new Error(
+                `Inshore accounts only accept MAD as the processing currency.\n` +
+                `Use currency: "504" or "MAD".\n` +
+                `For multi-currency display, use amountCur and symbolCur fields.`
+            );
+        }
+    } else if (accountType === 'offshore') {
+        // Offshore accounts can use any supported currency, but NOT amountCur/symbolCur
+        if (request.amountCur !== undefined || request.symbolCur !== undefined) {
+            throw new Error(
+                "Offshore accounts cannot use amountCur or symbolCur fields because they " +
+                "already use a custom processing currency."
+            );
+        }
     }
 
     // Validate amountCur and symbolCur (must be together)
@@ -164,7 +168,6 @@ export class PaymentValidator extends Validator {
       );
     }
 
-    // If symbolCur provided, validate it's a supported currency (but not MAD)
     // If symbolCur provided, validate it's a supported currency (but not MAD)
     if (hasSymbolCur && request.symbolCur) {
       if (!isSupportedCurrency(request.symbolCur)) {

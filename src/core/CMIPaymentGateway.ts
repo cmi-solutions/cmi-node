@@ -75,6 +75,11 @@ export class CMIPaymentGateway {
       config.confirmationMode as string | undefined
     );
 
+    // Validate and normalize account type (case-insensitive)
+    const normalizedAccountType = ConfigValidator.validateAccountType(
+      normalizedConfig.accountType as string | undefined
+    );
+
     // Wrap storeKey in SecretString to prevent accidental exposure BEFORE
     // storing config — storeKey is deliberately excluded from this.config.
     this.secureStoreKey = new SecretString(normalizedConfig.storeKey);
@@ -84,6 +89,7 @@ export class CMIPaymentGateway {
     this.config = {
       ...configWithoutKey,
       confirmationMode: normalizedConfirmationMode,
+      accountType: normalizedAccountType,
     };
 
     // Initialize extracted components with SecretString
@@ -92,6 +98,7 @@ export class CMIPaymentGateway {
       storeKey: this.secureStoreKey,
       storetype: this.config.storetype,
       trantype: this.config.trantype,
+      accountType: normalizedAccountType,
       callbackUrl: this.config.callbackUrl,
     });
 
