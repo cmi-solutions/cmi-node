@@ -27,9 +27,10 @@ export class FormGenerator {
    * Generate HTML form for payment submission
    *
    * @param params Payment parameters (already include hash)
+   * @param options Optional configuration (nonce for CSP support)
    * @returns HTML form string ready to send to browser
    */
-  generate(params: Record<string, any>): string {
+  generate(params: Record<string, any>, options?: { nonce?: string }): string {
     const escapedGatewayUrl = SanitizationUtil.escapeHtml(this.gatewayUrl);
 
     const formInputs = Object.entries(params)
@@ -40,6 +41,8 @@ export class FormGenerator {
       })
       .join('\n');
 
+    const nonceAttribute = options?.nonce ? ` nonce="${SanitizationUtil.escapeHtml(options.nonce)}"` : '';
+
     return `
       <!DOCTYPE html>
       <html>
@@ -47,13 +50,16 @@ export class FormGenerator {
           <meta charset="UTF-8">
           <title>Payment Redirect</title>
         </head>
-        <body onload="document.paymentForm.submit();">
+        <body>
           <form method="POST" action="${escapedGatewayUrl}" name="paymentForm">
             ${formInputs}
             <noscript>
               <input type="submit" value="Click here to complete payment" />
             </noscript>
           </form>
+          <script${nonceAttribute}>
+            document.paymentForm.submit();
+          </script>
         </body>
       </html>
       `.trim();

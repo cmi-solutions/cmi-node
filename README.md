@@ -372,6 +372,33 @@ if (result.success) {
 
 ---
 
+## 🛡️ Security Best Practices
+
+### 1. Idempotency & Replay Protection
+The CMI callback mechanism verifies that the data is authentic, but it does **not** prevent the same callback from being sent twice (replay attack). 
+- **Consumer Responsibility**: In your `onSuccess` handler, you **must** check your database to see if the order has already been marked as paid.
+- **Example**:
+  ```typescript
+  onSuccess: async (result) => {
+    const order = await db.orders.find(result.orderData.orderId);
+    if (order.status === 'paid') return; // Already processed
+    await db.orders.update(order.id, { status: 'paid' });
+  }
+  ```
+
+### 2. Content Security Policy (CSP)
+If your application uses a strict CSP that blocks `'unsafe-inline'` scripts:
+- **Use generateInputs()**: Instead of `generatePaymentForm()`, use `generateInputs()` to get the raw HTML inputs and render them into your own form with a custom, CSP-compliant submission script.
+- **Use a Nonce**: Alternatively, pass a nonce to `generatePaymentForm()`:
+  ```typescript
+  const form = gateway.generatePaymentForm(params, { nonce: 'your-csp-nonce' });
+  ```
+
+### 3. Rate Limiting
+Always implement rate limiting on your callback endpoint to prevent brute-force or Denial-of-Service (DoS) attacks.
+
+---
+
 ## ❓ Troubleshooting
 
 ### Hash Mismatch on Callback

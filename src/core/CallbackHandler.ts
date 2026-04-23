@@ -11,6 +11,12 @@ import { logger } from "@logger";
 
 /**
  * Framework‑agnostic callback handling.
+ * 
+ * **Security Note:** This handler verifies the SHA-512 hash to ensure data integrity,
+ * but it does NOT provide built-in replay attack protection or rate limiting.
+ * Consumers MUST implement their own idempotency logic (e.g., checking if the 
+ * `orderId` has already been processed in their database) to prevent multiple
+ * executions for the same payment.
  */
 export class CallbackHandler {
   private gateway: CMIPaymentGateway;

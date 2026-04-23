@@ -66,5 +66,36 @@ export class Validator {
   protected static isEmpty(value: string): boolean {
     return value.trim().length === 0;
   }
+
+  protected static hasDeepLinkProtocol(url: string): boolean {
+    try {
+      const urlObj = new URL(url);
+      // Deeplinks: any scheme like myapp://, app://, etc.
+      // We block dangerous schemes that could be used for XSS or local file access
+      const dangerousSchemes = ['javascript:', 'data:', 'vbscript:', 'file:'];
+      const protocol = urlObj.protocol.toLowerCase();
+
+      if (dangerousSchemes.includes(protocol)) return false;
+      
+      // If it's not http/https and not dangerous, we consider it a potential deep link
+      return protocol !== 'http:' && protocol !== 'https:';
+    } catch {
+      return false;
+    }
+  }
+
+  // Returns true for http, https, or any safe custom scheme (deeplink)
+  protected static isValidRedirectUrl(url: string): boolean {
+    try {
+      const urlObj = new URL(url);
+      const protocol = urlObj.protocol.toLowerCase();
+      // Block dangerous schemes
+      const blockedSchemes = ['javascript:', 'data:', 'vbscript:', 'file:'];
+      if (blockedSchemes.includes(protocol)) return false;
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }
 

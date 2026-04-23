@@ -10,32 +10,32 @@ export class PaymentValidator extends Validator {
    * Unknown/custom fields are NOT in this map and will pass through unchanged.
    */
   private static readonly PAYMENT_REQUEST_SCHEMA_MAP: Record<string, string> = {
-    'amount':           'amount',
-    'oid':              'oid',
-    'okurl':            'okUrl',
-    'failurl':          'failUrl',
-    'shopurl':          'shopUrl',
-    'email':            'email',
-    'billtoname':       'BillToName',
-    'currency':         'currency',
-    'lang':             'lang',
-    'hashalgorithm':    'hashAlgorithm',
-    'tel':              'tel',
-    'rnd':              'rnd',
-    'encoding':         'encoding',
-    'autoredirect':     'AutoRedirect',
-    'billtocity':       'BillToCity',
-    'billtocountry':    'BillToCountry',
-    'billtostreet1':    'BillToStreet1',
-    'billtostateprov':  'BillToStateProv',
+    'amount': 'amount',
+    'oid': 'oid',
+    'okurl': 'okUrl',
+    'failurl': 'failUrl',
+    'shopurl': 'shopUrl',
+    'email': 'email',
+    'billtoname': 'BillToName',
+    'currency': 'currency',
+    'lang': 'lang',
+    'hashalgorithm': 'hashAlgorithm',
+    'tel': 'tel',
+    'rnd': 'rnd',
+    'encoding': 'encoding',
+    'autoredirect': 'AutoRedirect',
+    'billtocity': 'BillToCity',
+    'billtocountry': 'BillToCountry',
+    'billtostreet1': 'BillToStreet1',
+    'billtostateprov': 'BillToStateProv',
     'billtopostalcode': 'BillToPostalCode',
-    'billtotelvoice':   'BillToTelVoice',
-    'billtocompany':    'BillToCompany',
-    'billtostreet2':    'BillToStreet2',
-    'billtostreet3':    'BillToStreet3',
-    'amountcur':        'amountCur',
-    'symbolcur':        'symbolCur',
-    'description':      'description',
+    'billtotelvoice': 'BillToTelVoice',
+    'billtocompany': 'BillToCompany',
+    'billtostreet2': 'BillToStreet2',
+    'billtostreet3': 'BillToStreet3',
+    'amountcur': 'amountCur',
+    'symbolcur': 'symbolCur',
+    'description': 'description',
   };
 
   /**
@@ -92,28 +92,21 @@ export class PaymentValidator extends Validator {
       throw new Error("Amount must be greater than or equal to 1");
     }
 
-    if (!request.shopUrl || !this.isValidUrl(request.shopUrl)) {
-      throw new Error("Valid shopUrl is required");
-    }
 
-    if (!request.okUrl || !this.isValidUrl(request.okUrl)) {
-      throw new Error("Valid okUrl is required");
+    if (!request.shopUrl || !this.isValidRedirectUrl(request.shopUrl)) {
+      throw new Error(
+        "Valid shopUrl is required. Must be a valid http/https URL or a mobile deeplink (e.g., myapp://success)"
+      );
     }
-
-    if (!request.failUrl || !this.isValidUrl(request.failUrl)) {
-      throw new Error("Valid failUrl is required");
+    if (!request.okUrl || !this.isValidRedirectUrl(request.okUrl)) {
+      throw new Error(
+        "Valid okUrl is required. Must be a valid http/https URL or a mobile deeplink (e.g., myapp://success)"
+      );
     }
-
-    if (!this.hasHttpProtocol(request.shopUrl)) {
-      throw new Error("http/https protocol is required for shopUrl");
-    }
-
-    if (!this.hasHttpProtocol(request.okUrl)) {
-      throw new Error("http/https protocol is required for okUrl");
-    }
-
-    if (!this.hasHttpProtocol(request.failUrl)) {
-      throw new Error("http/https protocol is required for failUrl");
+    if (!request.failUrl || !this.isValidRedirectUrl(request.failUrl)) {
+      throw new Error(
+        "Valid failUrl is required. Must be a valid http/https URL or a mobile deeplink (e.g., myapp://success)"
+      );
     }
 
     if (!request.email || !this.isValidEmail(request.email)) {

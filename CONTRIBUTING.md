@@ -78,7 +78,9 @@ src/
 3. Ensure linting passes: `npm run lint`
 4. Update documentation if your change affects the public API
 5. Update the `CHANGELOG.md` under an `[Unreleased]` section
-6. Submit your PR against the `main` branch
+6. **Submit your PR** against the `main` branch.
+    > [!IMPORTANT]
+    > **Direct commits to the `main` branch are strictly prohibited.** All changes must be submitted via a Pull Request and pass all CI checks before merging. Direct pushes to `main` will be blocked by branch protection and CI guards.
 
 ## Reporting Issues
 

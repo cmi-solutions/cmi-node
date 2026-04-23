@@ -224,17 +224,18 @@ export class CMIPaymentGateway {
    * Generate HTML form for payment submission
    *
    * @param params Payment parameters
+   * @param options Optional configuration (e.g. nonce for CSP)
    * @returns HTML form string ready to send to browser
    *
    * @example
    * ```
-   * const form = gateway.generatePaymentForm(params);
+   * const form = gateway.generatePaymentForm(params, { nonce: 'your-csp-nonce' });
    * res.setHeader('Content-Type', 'text/html');
    * res.send(form);
    * ```
    */
-  generatePaymentForm(params: Record<string, any>): string {
-    return this.formGenerator.generate(params);
+  generatePaymentForm(params: Record<string, any>, options?: { nonce?: string }): string {
+    return this.formGenerator.generate(params, options);
   }
 
   /**
