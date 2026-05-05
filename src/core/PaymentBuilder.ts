@@ -8,7 +8,7 @@
 import { PaymentRequest } from '@types';
 import { PaymentValidator } from '@validators';
 import { HashUtil, SanitizationUtil, FormatterUtil, GeneratorUtil, SecretString } from '@utils';
-import { normalizeLanguage } from '@constants';
+import { normalizeLanguage, AccountTypeValue } from '@constants';
 import { OPTIONAL_PAYMENT_FIELDS, STANDARD_PAYMENT_FIELDS } from '@constants/fields';
 
 // Pre-computed at module load — STANDARD_PAYMENT_FIELDS is a constant so this
@@ -21,6 +21,7 @@ export interface PaymentBuilderConfig {
     storeKey: string | SecretString;
     storetype: string;
     trantype: string;
+    accountType: AccountTypeValue;
     callbackUrl?: string;
 }
 
@@ -47,7 +48,7 @@ export class PaymentBuilder {
         paymentRequest = PaymentValidator.normalizeRequest(paymentRequest as Record<string, any>);
 
         // Validate payment request using existing validator
-        PaymentValidator.validate(paymentRequest);
+        PaymentValidator.validate(paymentRequest, this.config.accountType);
 
         // Generate order ID and random number if not provided
         const oid = paymentRequest.oid || GeneratorUtil.generateOrderId();
@@ -90,13 +91,16 @@ export class PaymentBuilder {
         // Validator ensures if provided, it must be a boolean
         params.AutoRedirect = FormatterUtil.formatAutoRedirect(paymentRequest.AutoRedirect ?? false);
 
-        // Add amountCur and symbolCur if provided
-        if (paymentRequest.amountCur !== undefined && paymentRequest.amountCur > 0) {
-            params.amountCur = FormatterUtil.formatAmount(paymentRequest.amountCur);
-        }
+        // Offshore accounts don't use amountCur/symbolCur
+        if (this.config.accountType !== 'offshore') {
+            // Add amountCur and symbolCur if provided
+            if (paymentRequest.amountCur !== undefined && paymentRequest.amountCur > 0) {
+                params.amountCur = FormatterUtil.formatAmount(paymentRequest.amountCur);
+            }
 
-        if (paymentRequest.symbolCur !== undefined) {
-            params.symbolCur = FormatterUtil.formatCurrencyCode(paymentRequest.symbolCur);
+            if (paymentRequest.symbolCur !== undefined) {
+                params.symbolCur = FormatterUtil.formatCurrencyCode(paymentRequest.symbolCur);
+            }
         }
 
         // Add any additional custom fields

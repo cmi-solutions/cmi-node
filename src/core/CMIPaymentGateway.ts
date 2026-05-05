@@ -75,6 +75,11 @@ export class CMIPaymentGateway {
       config.confirmationMode as string | undefined
     );
 
+    // Validate and normalize account type (case-insensitive)
+    const normalizedAccountType = ConfigValidator.validateAccountType(
+      normalizedConfig.accountType as string | undefined
+    );
+
     // Wrap storeKey in SecretString to prevent accidental exposure BEFORE
     // storing config — storeKey is deliberately excluded from this.config.
     this.secureStoreKey = new SecretString(normalizedConfig.storeKey);
@@ -84,6 +89,7 @@ export class CMIPaymentGateway {
     this.config = {
       ...configWithoutKey,
       confirmationMode: normalizedConfirmationMode,
+      accountType: normalizedAccountType,
     };
 
     // Initialize extracted components with SecretString
@@ -92,6 +98,7 @@ export class CMIPaymentGateway {
       storeKey: this.secureStoreKey,
       storetype: this.config.storetype,
       trantype: this.config.trantype,
+      accountType: normalizedAccountType,
       callbackUrl: this.config.callbackUrl,
     });
 
@@ -224,17 +231,18 @@ export class CMIPaymentGateway {
    * Generate HTML form for payment submission
    *
    * @param params Payment parameters
+   * @param options Optional configuration (e.g. nonce for CSP)
    * @returns HTML form string ready to send to browser
    *
    * @example
    * ```
-   * const form = gateway.generatePaymentForm(params);
+   * const form = gateway.generatePaymentForm(params, { nonce: 'your-csp-nonce' });
    * res.setHeader('Content-Type', 'text/html');
    * res.send(form);
    * ```
    */
-  generatePaymentForm(params: Record<string, any>): string {
-    return this.formGenerator.generate(params);
+  generatePaymentForm(params: Record<string, any>, options?: { nonce?: string }): string {
+    return this.formGenerator.generate(params, options);
   }
 
   /**

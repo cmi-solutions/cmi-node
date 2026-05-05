@@ -37,6 +37,20 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Smoke test — CJS require
+        run: node -e "const cmi = require('./dist/index.cjs'); if (typeof cmi.CMIPaymentGateway !== 'function') { throw new Error('CJS export broken'); } console.log('✓ CJS require works');"
+
+      - name: Smoke test — ESM import
+        run: node --input-type=module -e "import { CMIPaymentGateway } from './dist/index.js'; if (typeof CMIPaymentGateway !== 'function') { throw new Error('ESM export broken'); } console.log('✓ ESM import works');"
+
+      - name: Smoke test — Subpath imports
+        run: |
+          node --input-type=module -e "import { createExpressMiddleware } from './dist/adapters/express.js'; console.log('✓ cmi-node/express');"
+          node --input-type=module -e "import { handleNextJsCallback } from './dist/adapters/nextjs.js'; console.log('✓ cmi-node/nextjs');"
+          node --input-type=module -e "import { createFastifyHandler } from './dist/adapters/fastify.js'; console.log('✓ cmi-node/fastify');"
+          node --input-type=module -e "import { createHonoHandler } from './dist/adapters/hono.js'; console.log('✓ cmi-node/hono');"
+          node --input-type=module -e "import { NestJSCallbackHandler } from './dist/adapters/nestjs.js'; console.log('✓ cmi-node/nestjs');"
+
       - name: Run tests
         run: npm test
 
@@ -45,3 +59,47 @@ jobs:
 
       - name: Verify package contents
         run: npm pack --dry-run 2>&1
+
+  # Verify the published tarball installs correctly with Yarn
+  yarn-compat:
+    name: Yarn Compatibility
+    runs-on: ubuntu-latest
+    needs: ci   # only run after the main CI job passes
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies & build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Pack tarball
+        run: npm pack
+
+      - name: Test install with Yarn Classic
+        run: |
+          mkdir /tmp/yarn-classic-test && cd /tmp/yarn-classic-test
+          npm init -y
+          npm install -g yarn@1
+          yarn add $GITHUB_WORKSPACE/cmi-node-*.tgz
+          node -e "const { CMIPaymentGateway } = require('cmi-node'); console.log('✅ Yarn Classic CJS import OK');"
+          node --input-type=module -e "import { CMIPaymentGateway } from 'cmi-node'; console.log('✅ Yarn Classic ESM import OK');"
+
+      - name: Test install with Yarn Berry (PnP)
+        run: |
+          mkdir /tmp/yarn-berry-test && cd /tmp/yarn-berry-test
+          npm init -y
+          corepack enable
+          corepack prepare yarn@4 --activate
+          yarn init -2
+          yarn add $GITHUB_WORKSPACE/cmi-node-*.tgz
+          yarn node -e "const { CMIPaymentGateway } = require('cmi-node'); console.log('✅ Yarn Berry CJS import OK');"
+          yarn node --input-type=module -e "import { CMIPaymentGateway } from 'cmi-node'; console.log('✅ Yarn Berry ESM import OK');"

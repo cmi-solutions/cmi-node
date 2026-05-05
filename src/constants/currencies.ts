@@ -70,30 +70,6 @@ export function getCurrencyInfo(value: string): CurrencyInfo | undefined {
   return undefined;
 }
 
-// // Get currency NUMERIC (504, 840, etc.)
-// export function getCurrencyNumeric(value: string): string | undefined {
-//   if (value in NUMERIC_TO_CODE_MAP) {
-//     return value;
-//   }
-
-//   if (value in SUPPORTED_CURRENCIES) {
-//     return SUPPORTED_CURRENCIES[value as CurrencyCode].numeric;
-//   }
-
-//   return undefined;
-// }
-
-// // get currency CODE (USD, MAD, etc.) based on a valid input currency (code or numeric)
-// export function getCurrencyCode(value: string): string | undefined {
-//   if (value in SUPPORTED_CURRENCIES) {
-//     return value;
-//   }
-//   if (value in NUMERIC_TO_CODE_MAP) {
-//     return NUMERIC_TO_CODE_MAP[value];
-//   } 
-//   return undefined;
-// }
-
 /**
  * Normalize currency input to numeric code
  * Accepts: "MAD", "504", "usd", "840" → returns numeric code ("504", "840", etc.)

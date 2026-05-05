@@ -79,9 +79,10 @@ export class CallbackVerifier {
                 };
             }
 
-            // Extract return code
+            // Extract return code (use nullish coalescing to avoid skipping
+            // falsy-but-valid values like numeric 0)
             const returnCode = String(
-                callbackParams.ProcReturnCode || callbackParams.ReturnCode || ''
+                callbackParams.ProcReturnCode ?? callbackParams.ReturnCode ?? ''
             );
 
             // Check payment status

@@ -657,10 +657,16 @@ describe('PaymentValidator', () => {
         );
     });
 
-    it('should throw for non-https shopUrl', () => {
+    it('should throw for dangerous shopUrl schemes', () => {
         assert.throws(
-            () => PaymentValidator.validate({ ...validPaymentRequest, shopUrl: 'ftp://example.com' } as any),
+            () => PaymentValidator.validate({ ...validPaymentRequest, shopUrl: 'javascript:alert(1)' } as any),
             /shopUrl/
+        );
+    });
+
+    it('should accept deep link shopUrl', () => {
+        assert.doesNotThrow(
+            () => PaymentValidator.validate({ ...validPaymentRequest, shopUrl: 'myapp://home' } as any)
         );
     });
 
@@ -740,15 +746,28 @@ describe('CMIPaymentGateway - generatePaymentForm', () => {
             customField: '<script>alert(1)</script>',
         });
         const form = gw.generatePaymentForm(params);
-        assert.ok(!form.includes('<script>'), 'Raw <script> must not appear');
-        assert.ok(form.includes('&lt;script&gt;'), 'XSS payload should be HTML-escaped');
+        // The form contains a legitimate <script> tag now, so we check for the escaped payload
+        assert.ok(!form.includes('<input type="hidden" name="customField" value="<script>'), 'Raw payload must not appear in input');
+        assert.ok(form.includes('value="&lt;script&gt;alert(1)&lt;/script&gt;"'), 'XSS payload should be HTML-escaped');
     });
 
-    it('should auto-submit on page load (onload attribute)', () => {
+    it('should auto-submit on page load (script tag)', () => {
         const gw   = new CMIPaymentGateway(validConfig);
         const params = gw.createPaymentParams(validPaymentRequest);
         const form = gw.generatePaymentForm(params);
-        assert.ok(form.includes('onload') || form.includes('submit'), 'Form should auto-submit');
+        assert.ok(form.includes('<script'), 'Form should include script tag');
+        assert.ok(
+            form.includes('HTMLFormElement.prototype.submit.call'),
+            'Script should use DOM-clobbering-safe submit call'
+        );
+    });
+
+    it('should support CSP nonce in payment form', () => {
+        const gw   = new CMIPaymentGateway(validConfig);
+        const params = gw.createPaymentParams(validPaymentRequest);
+        const nonce = 'test-nonce-123';
+        const form = gw.generatePaymentForm(params, { nonce });
+        assert.ok(form.includes(`nonce="${nonce}"`), 'Script tag should include nonce');
     });
 });
 
@@ -1373,13 +1392,12 @@ describe('Validator — Extended Coverage', () => {
         } as any));
     });
 
-    it('should reject URLs without http/https', () => {
+    it('should reject dangerous URL schemes', () => {
         assert.throws(
             () => PaymentValidator.validate({
                 ...validPaymentRequest,
-                shopUrl: 'ftp://example.com',
-            } as any),
-            /http\/https protocol/
+                shopUrl: 'javascript:alert(1)',
+            } as any)
         );
     });
 

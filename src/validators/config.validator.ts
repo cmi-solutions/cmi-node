@@ -6,7 +6,10 @@ import {
   isSupportedTranType,
   SUPPORTED_TRAN_TYPES,
   isSupportedConfirmationMode,
-  SUPPORTED_CONFIRMATION_MODES
+  SUPPORTED_CONFIRMATION_MODES,
+  isSupportedAccountType,
+  SUPPORTED_ACCOUNT_TYPES,
+  AccountTypeValue
 } from '@constants';
 import { Validator } from './validator';
 
@@ -15,11 +18,12 @@ export class ConfigValidator extends Validator {
    * Map of lowercase case-insensitive input keys -> canonical camelCase schema keys.
    */
   private static readonly CONFIG_SCHEMA_MAP: Record<string, keyof PaymentConfig> = {
-    'storekey':   'storeKey',
-    'clientid':   'clientId',
-    'gatewayurl': 'gatewayUrl',
-    'storetype':  'storetype',
-    'trantype':   'trantype',
+    'storekey':    'storeKey',
+    'clientid':    'clientId',
+    'gatewayurl':  'gatewayUrl',
+    'storetype':   'storetype',
+    'trantype':    'trantype',
+    'accounttype': 'accountType',
     'callbackurl': 'callbackUrl'
   };
 
@@ -114,6 +118,33 @@ export class ConfigValidator extends Validator {
         `Supported types (case-insensitive): ${SUPPORTED_TRAN_TYPES.join(', ')}`
       );
     }
+
+    // Validate accountType (optional, default: inshore)
+    if (config.accountType) {
+        const normalizedAccountType = config.accountType.toLowerCase();
+        if (!isSupportedAccountType(normalizedAccountType)) {
+            throw new Error(
+                `Unsupported account type: "${config.accountType}". ` +
+                `Supported types: ${SUPPORTED_ACCOUNT_TYPES.join(', ')}`
+            );
+        }
+    }
+  }
+
+  /**
+   * Validate and normalize account type
+   */
+  static validateAccountType(type: string | undefined): AccountTypeValue {
+    if (!type) return 'inshore';
+    
+    const normalized = type.toLowerCase();
+    if (!isSupportedAccountType(normalized)) {
+        throw new Error(
+            `Unsupported account type: "${type}". ` +
+            `Supported types: ${SUPPORTED_ACCOUNT_TYPES.join(', ')}`
+        );
+    }
+    return normalized as AccountTypeValue;
   }
 
   /**

@@ -3,8 +3,11 @@ import { SanitizationUtil } from "@utils";
 import { HASH_SANITIZE_FIELDS } from "@constants/fields";
 import { SecretString } from "./secret-string.util";
 
-// Pre-computed set for hash sanitization (avoids re-creation per call)
-const SANITIZE_FIELD_SET: ReadonlySet<string> = new Set(HASH_SANITIZE_FIELDS);
+// Pre-computed set for hash sanitization — lowercased for case-insensitive lookup.
+// Avoids re-creation per call and ensures keys like 'billtoname' match correctly.
+const SANITIZE_FIELD_SET: ReadonlySet<string> = new Set(
+    HASH_SANITIZE_FIELDS.map(f => f.toLowerCase())
+);
 
 export class HashUtil {
 
@@ -22,7 +25,8 @@ export class HashUtil {
           let paramValue = String(params[key] ?? "").trim();
 
           // Apply sanitization to billing fields (CRITICAL)
-          if (SANITIZE_FIELD_SET.has(key)) {
+          // Uses lowerKey for case-insensitive matching against the set.
+          if (SANITIZE_FIELD_SET.has(lowerKey)) {
             paramValue = SanitizationUtil.sanitizeString(paramValue);
           }
 

@@ -1,4 +1,4 @@
-import { isSupportedLanguage } from "@constants";
+import { isSupportedLanguage, AccountTypeValue } from "@constants";
 import { isSupportedCurrency, isMoroccanDirham } from "@constants/currencies";
 import { PaymentRequest } from "@types";
 import { Validator } from "@validators";
@@ -10,32 +10,32 @@ export class PaymentValidator extends Validator {
    * Unknown/custom fields are NOT in this map and will pass through unchanged.
    */
   private static readonly PAYMENT_REQUEST_SCHEMA_MAP: Record<string, string> = {
-    'amount':           'amount',
-    'oid':              'oid',
-    'okurl':            'okUrl',
-    'failurl':          'failUrl',
-    'shopurl':          'shopUrl',
-    'email':            'email',
-    'billtoname':       'BillToName',
-    'currency':         'currency',
-    'lang':             'lang',
-    'hashalgorithm':    'hashAlgorithm',
-    'tel':              'tel',
-    'rnd':              'rnd',
-    'encoding':         'encoding',
-    'autoredirect':     'AutoRedirect',
-    'billtocity':       'BillToCity',
-    'billtocountry':    'BillToCountry',
-    'billtostreet1':    'BillToStreet1',
-    'billtostateprov':  'BillToStateProv',
+    'amount': 'amount',
+    'oid': 'oid',
+    'okurl': 'okUrl',
+    'failurl': 'failUrl',
+    'shopurl': 'shopUrl',
+    'email': 'email',
+    'billtoname': 'BillToName',
+    'currency': 'currency',
+    'lang': 'lang',
+    'hashalgorithm': 'hashAlgorithm',
+    'tel': 'tel',
+    'rnd': 'rnd',
+    'encoding': 'encoding',
+    'autoredirect': 'AutoRedirect',
+    'billtocity': 'BillToCity',
+    'billtocountry': 'BillToCountry',
+    'billtostreet1': 'BillToStreet1',
+    'billtostateprov': 'BillToStateProv',
     'billtopostalcode': 'BillToPostalCode',
-    'billtotelvoice':   'BillToTelVoice',
-    'billtocompany':    'BillToCompany',
-    'billtostreet2':    'BillToStreet2',
-    'billtostreet3':    'BillToStreet3',
-    'amountcur':        'amountCur',
-    'symbolcur':        'symbolCur',
-    'description':      'description',
+    'billtotelvoice': 'BillToTelVoice',
+    'billtocompany': 'BillToCompany',
+    'billtostreet2': 'BillToStreet2',
+    'billtostreet3': 'BillToStreet3',
+    'amountcur': 'amountCur',
+    'symbolcur': 'symbolCur',
+    'description': 'description',
   };
 
   /**
@@ -64,9 +64,11 @@ export class PaymentValidator extends Validator {
     return normalized as PaymentRequest;
   }
 
-  static validate(request: PaymentRequest): void {
+  static validate(request: PaymentRequest, accountType: AccountTypeValue = 'inshore'): void {
     // Check for duplicate/conflicting field names (case-insensitive)
     this.checkDuplicateFields(request);
+
+    // TODO : add a check duplicates for the accountType
 
     // Validate amount exists and is a valid number
     if (request.amount === undefined || request.amount === null) {
@@ -92,28 +94,21 @@ export class PaymentValidator extends Validator {
       throw new Error("Amount must be greater than or equal to 1");
     }
 
-    if (!request.shopUrl || !this.isValidUrl(request.shopUrl)) {
-      throw new Error("Valid shopUrl is required");
-    }
 
-    if (!request.okUrl || !this.isValidUrl(request.okUrl)) {
-      throw new Error("Valid okUrl is required");
+    if (!request.shopUrl || !this.isValidRedirectUrl(request.shopUrl)) {
+      throw new Error(
+        "Valid shopUrl is required. Must be a valid http/https URL or a mobile deeplink (e.g., myapp://success)"
+      );
     }
-
-    if (!request.failUrl || !this.isValidUrl(request.failUrl)) {
-      throw new Error("Valid failUrl is required");
+    if (!request.okUrl || !this.isValidRedirectUrl(request.okUrl)) {
+      throw new Error(
+        "Valid okUrl is required. Must be a valid http/https URL or a mobile deeplink (e.g., myapp://success)"
+      );
     }
-
-    if (!this.hasHttpProtocol(request.shopUrl)) {
-      throw new Error("http/https protocol is required for shopUrl");
-    }
-
-    if (!this.hasHttpProtocol(request.okUrl)) {
-      throw new Error("http/https protocol is required for okUrl");
-    }
-
-    if (!this.hasHttpProtocol(request.failUrl)) {
-      throw new Error("http/https protocol is required for failUrl");
+    if (!request.failUrl || !this.isValidRedirectUrl(request.failUrl)) {
+      throw new Error(
+        "Valid failUrl is required. Must be a valid http/https URL or a mobile deeplink (e.g., myapp://success)"
+      );
     }
 
     if (!request.email || !this.isValidEmail(request.email)) {
@@ -142,22 +137,32 @@ export class PaymentValidator extends Validator {
       );
     }
 
-
-    // Currency must be MAD for CMI (using centralized function)
+    // Currency Rules based on Account Type
     const isMAD = isMoroccanDirham(request.currency);
 
-    // Check if currency is MAD (either "MAD" or "504")
-    if (!isMAD) {
-      throw new Error(
-        `CMI gateway only accepts MAD as the processing currency.\n` +
-        `Use currency: "504" or "MAD".\n` +
-        `For multi-currency display, use amountCur and symbolCur fields.\n` +
-        `Example:\n` +
-        `  amount: 100 (in MAD)\n` +
-        `  currency: "504"\n` +
-        `  amountCur: 10 (customer sees this)\n` +
-        `  symbolCur: "840" (USD)`
-      );
+    if (accountType === 'inshore') {
+
+      // Inshore accounts ONLY accept MAD as processing currency
+      if (!isMAD) {
+        throw new Error(
+          `Inshore accounts only accept MAD as the processing currency.\n` +
+          `Use currency: "504" or "MAD".\n` +
+          `For multi-currency display, use amountCur and symbolCur fields.`
+        );
+      }
+    } else if (accountType === 'offshore') {
+      if (isMAD) {
+        throw new Error(
+          `Offshore accounts cannot use MAD as processing currency.`
+        );
+      }
+      // Offshore accounts can use any supported currency, but NOT amountCur/symbolCur
+      else if (request.amountCur !== undefined || request.symbolCur !== undefined) {
+        throw new Error(
+          "Offshore accounts cannot use amountCur or symbolCur fields because they " +
+          "already use a custom processing currency."
+        );
+      }
     }
 
     // Validate amountCur and symbolCur (must be together)
@@ -171,7 +176,6 @@ export class PaymentValidator extends Validator {
       );
     }
 
-    // If symbolCur provided, validate it's a supported currency (but not MAD)
     // If symbolCur provided, validate it's a supported currency (but not MAD)
     if (hasSymbolCur && request.symbolCur) {
       if (!isSupportedCurrency(request.symbolCur)) {
