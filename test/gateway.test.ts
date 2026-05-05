@@ -756,7 +756,10 @@ describe('CMIPaymentGateway - generatePaymentForm', () => {
         const params = gw.createPaymentParams(validPaymentRequest);
         const form = gw.generatePaymentForm(params);
         assert.ok(form.includes('<script'), 'Form should include script tag');
-        assert.ok(form.includes('submit()'), 'Script should call submit()');
+        assert.ok(
+            form.includes('HTMLFormElement.prototype.submit.call'),
+            'Script should use DOM-clobbering-safe submit call'
+        );
     });
 
     it('should support CSP nonce in payment form', () => {

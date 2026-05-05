@@ -230,6 +230,7 @@ new CMIPaymentGateway(config: PaymentConfig, options?: CMIPaymentGatewayOptions)
 | `gatewayUrl` | `string` | ✅ | CMI gateway URL (must use `http://` or `https://`) |
 | `storetype` | `string` | ✅ | Store type (`3d_pay_hosting`, `3d`, `pay_hosting`, etc.) |
 | `trantype` | `string` | ✅ | Transaction type (case-insensitive: `preauth`, `auth`, `postauth`, `void`, `credit`) |
+| `accountType` | `string` | ❌ | Account type: `'inshore'` (default) or `'offshore'`. See [Account Types](#-account-types) below. |
 | `callbackUrl` | `string` | ❌ | Callback URL for payment notifications |
 
 #### `CMIPaymentGatewayOptions`
@@ -262,7 +263,7 @@ Creates payment parameters for initiating a payment.
 | `okUrl` | `string` | ✅ | — | Redirect URL on success (must use `http(s)://`) |
 | `failUrl` | `string` | ✅ | — | Redirect URL on failure (must use `http(s)://`) |
 | `shopUrl` | `string` | ✅ | — | Your shop URL (must use `http(s)://`) |
-| `currency` | `string` | ✅ | — | Must be `"504"` or `"MAD"` |
+| `currency` | `string` | ✅ | — | Currency code or numeric. Inshore: must be `"504"` or `"MAD"`. Offshore: any supported currency. |
 | `oid` | `string` | ❌ | 64 | Order ID (auto-generated if omitted) |
 | `rnd` | `string` | ❌ | 20 | Random value (auto-generated if omitted, must be alphabetic) |
 | `lang` | `string` | ❌ | — | Language code: `"fr"`, `"en"`, `"ar"`, etc. (default: `"fr"`) |
@@ -293,7 +294,7 @@ Generates an auto-submitting HTML form for payment submission.
 ```typescript
 const form = gateway.generatePaymentForm(params);
 // Returns HTML string with all params as hidden inputs
-// Auto-submits via <body onload="...">
+// Auto-submits via an inline <script> tag
 // All values are HTML-escaped to prevent XSS
 ```
 
@@ -399,6 +400,31 @@ Always implement rate limiting on your callback endpoint to prevent brute-force 
 
 ---
 
+## 🏦 Account Types
+
+The SDK supports two account types that affect currency and multi-currency behavior:
+
+| Account Type | Currency | `amountCur` / `symbolCur` | Description |
+|---|---|---|---|
+| `'inshore'` (default) | MAD only (`"504"` or `"MAD"`) | ✅ Allowed | Standard Moroccan merchant account. Use `amountCur`/`symbolCur` to display a foreign currency equivalent. |
+| `'offshore'` | Any supported currency | ❌ Not allowed | Offshore merchant account that processes in a foreign currency directly. |
+
+```typescript
+// Inshore (default) — process in MAD, display in EUR
+const inshoreGateway = new CMIPaymentGateway({
+  ...config,
+  // accountType: 'inshore' is the default
+});
+
+// Offshore — process directly in USD
+const offshoreGateway = new CMIPaymentGateway({
+  ...config,
+  accountType: 'offshore',
+});
+```
+
+---
+
 ## ❓ Troubleshooting
 
 ### Hash Mismatch on Callback
@@ -418,15 +444,26 @@ Always implement rate limiting on your callback endpoint to prevent brute-force 
 
 The CMI gateway requires `amount >= 1`. For sub-unit pricing, multiply to reach the minimum.
 
-### "CMI gateway only accepts MAD"
+### "Inshore accounts only accept MAD"
 
-The `currency` field must be `"504"` (numeric) or `"MAD"`. For foreign currency display, use:
+For **inshore** accounts (default), the `currency` field must be `"504"` (numeric) or `"MAD"`. For foreign currency display, use `amountCur` and `symbolCur`:
 ```typescript
 gateway.createPaymentParams({
   amount: 100,            // Amount in MAD
-  currency: '504',        // Always MAD
+  currency: '504',        // Always MAD for inshore
   amountCur: 10,          // Display amount in foreign currency
   symbolCur: '840',       // Foreign currency (USD)
+  // ...
+});
+```
+
+For **offshore** accounts, you can use any supported currency directly:
+```typescript
+const gateway = new CMIPaymentGateway({ ...config, accountType: 'offshore' });
+gateway.createPaymentParams({
+  amount: 50,
+  currency: 'USD',        // Any supported currency
+  // amountCur/symbolCur are NOT allowed for offshore
   // ...
 });
 ```
@@ -442,7 +479,7 @@ ngrok http 3000
 ### "Unknown configuration field detected"
 
 The SDK strictly validates configuration fields. Only these fields are accepted:
-`storeKey`, `clientId`, `gatewayUrl`, `storetype`, `trantype`, `callbackUrl`, `confirmationMode`.
+`storeKey`, `clientId`, `gatewayUrl`, `storetype`, `trantype`, `accountType`, `callbackUrl`, `confirmationMode`.
 
 Check for typos or extra fields.
 

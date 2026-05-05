@@ -48,8 +48,8 @@ describe('Account Type Feature (Inshore/Offshore)', () => {
     it('offshore should reject amountCur/symbolCur', () => {
         const gw = new CMIPaymentGateway({ ...baseConfig, accountType: 'offshore' } as any);
         assert.throws(
-            () => gw.createPaymentParams({ 
-                ...validRequest, 
+            () => gw.createPaymentParams({
+                ...validRequest,
                 currency: 'USD',
                 amountCur: 100,
                 symbolCur: 'EUR'
@@ -60,8 +60,8 @@ describe('Account Type Feature (Inshore/Offshore)', () => {
 
     it('inshore should accept amountCur/symbolCur with MAD', () => {
         const gw = new CMIPaymentGateway(baseConfig as any);
-        const params = gw.createPaymentParams({ 
-            ...validRequest, 
+        const params = gw.createPaymentParams({
+            ...validRequest,
             currency: 'MAD',
             amountCur: 10,
             symbolCur: 'USD'

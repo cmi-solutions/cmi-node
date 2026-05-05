@@ -68,6 +68,8 @@ export class PaymentValidator extends Validator {
     // Check for duplicate/conflicting field names (case-insensitive)
     this.checkDuplicateFields(request);
 
+    // TODO : add a check duplicates for the accountType
+
     // Validate amount exists and is a valid number
     if (request.amount === undefined || request.amount === null) {
       throw new Error("Amount is required");
@@ -139,22 +141,28 @@ export class PaymentValidator extends Validator {
     const isMAD = isMoroccanDirham(request.currency);
 
     if (accountType === 'inshore') {
-        // Inshore accounts ONLY accept MAD as processing currency
-        if (!isMAD) {
-            throw new Error(
-                `Inshore accounts only accept MAD as the processing currency.\n` +
-                `Use currency: "504" or "MAD".\n` +
-                `For multi-currency display, use amountCur and symbolCur fields.`
-            );
-        }
+
+      // Inshore accounts ONLY accept MAD as processing currency
+      if (!isMAD) {
+        throw new Error(
+          `Inshore accounts only accept MAD as the processing currency.\n` +
+          `Use currency: "504" or "MAD".\n` +
+          `For multi-currency display, use amountCur and symbolCur fields.`
+        );
+      }
     } else if (accountType === 'offshore') {
-        // Offshore accounts can use any supported currency, but NOT amountCur/symbolCur
-        if (request.amountCur !== undefined || request.symbolCur !== undefined) {
-            throw new Error(
-                "Offshore accounts cannot use amountCur or symbolCur fields because they " +
-                "already use a custom processing currency."
-            );
-        }
+      if (isMAD) {
+        throw new Error(
+          `Offshore accounts cannot use MAD as processing currency.`
+        );
+      }
+      // Offshore accounts can use any supported currency, but NOT amountCur/symbolCur
+      else if (request.amountCur !== undefined || request.symbolCur !== undefined) {
+        throw new Error(
+          "Offshore accounts cannot use amountCur or symbolCur fields because they " +
+          "already use a custom processing currency."
+        );
+      }
     }
 
     // Validate amountCur and symbolCur (must be together)

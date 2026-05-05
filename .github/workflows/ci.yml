@@ -37,6 +37,20 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Smoke test — CJS require
+        run: node -e "const cmi = require('./dist/index.cjs'); if (typeof cmi.CMIPaymentGateway !== 'function') { throw new Error('CJS export broken'); } console.log('✓ CJS require works');"
+
+      - name: Smoke test — ESM import
+        run: node --input-type=module -e "import { CMIPaymentGateway } from './dist/index.js'; if (typeof CMIPaymentGateway !== 'function') { throw new Error('ESM export broken'); } console.log('✓ ESM import works');"
+
+      - name: Smoke test — Subpath imports
+        run: |
+          node --input-type=module -e "import { createExpressMiddleware } from './dist/adapters/express.js'; console.log('✓ cmi-node/express');"
+          node --input-type=module -e "import { handleNextJsCallback } from './dist/adapters/nextjs.js'; console.log('✓ cmi-node/nextjs');"
+          node --input-type=module -e "import { createFastifyHandler } from './dist/adapters/fastify.js'; console.log('✓ cmi-node/fastify');"
+          node --input-type=module -e "import { createHonoHandler } from './dist/adapters/hono.js'; console.log('✓ cmi-node/hono');"
+          node --input-type=module -e "import { NestJSCallbackHandler } from './dist/adapters/nestjs.js'; console.log('✓ cmi-node/nestjs');"
+
       - name: Run tests
         run: npm test
 
