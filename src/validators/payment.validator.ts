@@ -36,6 +36,9 @@ export class PaymentValidator extends Validator {
     'amountcur': 'amountCur',
     'symbolcur': 'symbolCur',
     'description': 'description',
+    'sessiontimeout': 'sessiontimeout',
+    'redirectget': 'redirectGet',
+    'callbackresponse': 'CallbackResponse',
   };
 
   /**
@@ -266,7 +269,19 @@ export class PaymentValidator extends Validator {
       }
     }
 
-
+    // Validate sessiontimeout if provided
+    if (request.sessiontimeout !== undefined) {
+      if (typeof request.sessiontimeout !== 'number' || !Number.isFinite(request.sessiontimeout)) {
+        throw new Error(
+          "sessiontimeout must be a number (seconds). Min: 30, Max: 2700, Default: 1800."
+        );
+      }
+      if (request.sessiontimeout < 30 || request.sessiontimeout > 2700) {
+        throw new Error(
+          `sessiontimeout must be between 30 and 2700 seconds (got ${request.sessiontimeout}).`
+        );
+      }
+    }
 
     // Validate other billing fields if provided
     const billingFields: Array<{ key: keyof PaymentRequest; label: string; maxLen: number }> = [
