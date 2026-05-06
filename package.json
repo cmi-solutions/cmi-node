@@ -84,7 +84,8 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "type-check": "tsc --noEmit",
     "build": "tsup",
-    "dev": "tsup --watch"
+    "dev": "tsup --watch",
+    "prepare": "husky"
   },
   "keywords": [
     "payment",
@@ -115,11 +116,14 @@
     "node": ">=18.0.0"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.5.3",
+    "@commitlint/config-conventional": "^20.5.3",
     "@types/node": "^20.19.24",
-    "@typescript-eslint/eslint-plugin": "^6.19.0",
-    "@typescript-eslint/parser": "^6.19.0",
+    "@typescript-eslint/eslint-plugin": "^8.59.2",
+    "@typescript-eslint/parser": "^8.59.2",
     "c8": "^9.1.0",
     "eslint": "^8.56.0",
+    "husky": "^9.1.7",
     "prettier": "^3.2.0",
     "tsup": "^8.5.1",
     "tsx": "^4.19.0",
@@ -130,10 +134,10 @@
     "provenance": true
   },
   "peerDependencies": {
+    "@nestjs/common": ">=9.0.0",
     "express": ">=4.0.0",
     "fastify": ">=4.0.0",
     "hono": ">=3.0.0",
-    "@nestjs/common": ">=9.0.0",
     "next": ">=13.0.0"
   },
   "peerDependenciesMeta": {
