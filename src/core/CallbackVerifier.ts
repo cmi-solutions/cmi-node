@@ -34,12 +34,17 @@ export class CallbackVerifier {
     }
 
     /**
-     * Resolve a field from callbackParams by trying multiple key variants
+     * Resolve a field from callbackParams by trying multiple key variants.
+     * Returns the first non-empty string found, or undefined.
      */
-    private static resolveField(params: Record<string, any>, ...keys: string[]): string | undefined {
+    private static resolveField(
+        params: Record<string, any>,
+        ...keys: string[]
+    ): string | undefined {
         for (const key of keys) {
-            if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
-                return String(params[key]);
+            const val = params[key];
+            if (val !== undefined && val !== null && val !== '') {
+                return String(val);
             }
         }
         return undefined;
@@ -93,20 +98,45 @@ export class CallbackVerifier {
                 callbackParams.ProcReturnCode ?? callbackParams.ReturnCode ?? ''
             );
 
-            // Resolve all fields using both casing variants
+            // ── Resolve all callback fields (case variants) ───────────────────────
+
             const transactionId =
                 CallbackVerifier.resolveField(callbackParams, 'TransId', 'transId') ??
                 callbackParams.oid;
 
-            const response = CallbackVerifier.resolveField(callbackParams, 'Response', 'response');
-            const mdStatus = CallbackVerifier.resolveField(callbackParams, 'mdStatus', 'MdStatus', 'MDSTATUS');
-            const errMsg = CallbackVerifier.resolveField(callbackParams, 'ErrMsg', 'errMsg', 'ERRMSG');
-            const authCode = CallbackVerifier.resolveField(callbackParams, 'AuthCode', 'authCode', 'AUTHCODE');
-            const cardholderName = CallbackVerifier.resolveField(callbackParams, 'EXTRA_CARDHOLDERNAME', 'extra_cardholdername');
-            const maskedCardNumber = CallbackVerifier.resolveField(callbackParams, 'EXTRA_CARDNUMBER', 'extra_cardnumber');
-            const transactionDate = CallbackVerifier.resolveField(callbackParams, 'EXTRA_TRXDATE', 'extra_trxdate');
+            // Always present (success + failure)
+            const response    = CallbackVerifier.resolveField(callbackParams, 'Response',   'response');
+            const mdStatus    = CallbackVerifier.resolveField(callbackParams, 'mdStatus',   'MdStatus',  'MDSTATUS');
+            const errMsg      = CallbackVerifier.resolveField(callbackParams, 'ErrMsg',     'errMsg',    'ERRMSG');
+            const errCode     = CallbackVerifier.resolveField(callbackParams, 'ErrCode',    'errcode',   'ERRCODE');
+            const returnOid   = CallbackVerifier.resolveField(callbackParams, 'ReturnOid',  'returnOid', 'RETURNOID');
+            const clientIp    = CallbackVerifier.resolveField(callbackParams, 'ClientIp',   'clientIp',  'CLIENTIP');
 
-            // Check payment status
+            // Present on success
+            const authCode    = CallbackVerifier.resolveField(callbackParams, 'AuthCode',   'authCode',  'AUTHCODE');
+            // CMI sends transaction date as 'EXTRA.TRXDATE' (dot in key name)
+            const transactionDate = CallbackVerifier.resolveField(
+                callbackParams, 'EXTRA.TRXDATE', 'EXTRA.trxdate', 'extra.trxdate'
+            );
+            const maskedPan       = CallbackVerifier.resolveField(callbackParams, 'MaskedPan',  'maskedPan',  'MASKEDPAN');
+            const cardHolderName  = CallbackVerifier.resolveField(callbackParams, 'cardHolderName', 'CardHolderName', 'CARDHOLDERNAME');
+            const paymentType     = CallbackVerifier.resolveField(callbackParams, 'paymentType',    'PaymentType',    'PAYMENTTYPE');
+            // CMI sends card brand/issuer as 'EXTRA.CARDBRAND' / 'EXTRA.CARDISSUER' (dot in key name)
+            const cardBrand       = CallbackVerifier.resolveField(
+                callbackParams, 'EXTRA.CARDBRAND', 'EXTRA.cardbrand', 'extra.cardbrand'
+            );
+            const cardIssuer      = CallbackVerifier.resolveField(
+                callbackParams, 'EXTRA.CARDISSUER', 'EXTRA.cardissuer', 'extra.cardissuer'
+            );
+            const cardExpYear     = CallbackVerifier.resolveField(callbackParams, 'EcomPaymentCardExpDateYear',  'ecomPaymentCardExpDateYear');
+            const cardExpMonth    = CallbackVerifier.resolveField(callbackParams, 'EcomPaymentCardExpDateMonth', 'ecomPaymentCardExpDateMonth');
+            const hostRefNum      = CallbackVerifier.resolveField(callbackParams, 'HostRefNum',  'hostRefNum',  'HOSTREFNUM');
+            const acqStan         = CallbackVerifier.resolveField(callbackParams, 'acqStan',     'AcqStan',    'ACQSTAN');
+            const eci             = CallbackVerifier.resolveField(callbackParams, 'eci',         'Eci',        'ECI');
+            const txStatus        = CallbackVerifier.resolveField(callbackParams, 'txstatus',    'txStatus',   'TXSTATUS');
+
+            // ── Build result ───────────────────────────────────────────────────────
+
             if (returnCode === '00') {
                 const confirmationResponse = this.getConfirmationResponse();
 
@@ -119,13 +149,28 @@ export class CallbackVerifier {
                         amount: CallbackVerifier.safeParseAmount(callbackParams.amount),
                         currency: callbackParams.currency,
                         transactionId,
+                        // Always present
                         returnCode,
                         response,
                         mdStatus,
+                        errorMessage: errMsg,
+                        errorCode: errCode,
+                        returnOid,
+                        clientIp,
+                        // Success fields
                         authCode,
-                        cardholderName,
-                        maskedCardNumber,
                         transactionDate,
+                        maskedPan,
+                        cardHolderName,
+                        paymentType,
+                        cardBrand,
+                        cardIssuer,
+                        cardExpYear,
+                        cardExpMonth,
+                        hostRefNum,
+                        acqStan,
+                        eci,
+                        txStatus,
                     },
                 };
             } else {
@@ -140,10 +185,14 @@ export class CallbackVerifier {
                         amount: CallbackVerifier.safeParseAmount(callbackParams.amount),
                         currency: callbackParams.currency,
                         transactionId,
+                        // Always present
                         returnCode,
                         response,
                         mdStatus,
                         errorMessage: errMsg,
+                        errorCode: errCode,
+                        returnOid,
+                        clientIp,
                     },
                 };
             }
