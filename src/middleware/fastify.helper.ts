@@ -55,7 +55,7 @@ export function createFastifyHandler(
 
             // Fastify uses .code() instead of .status()
             return reply.code(response.status).send(response.body);
-        } catch (error) {
+        } catch {
             return reply.code(500).send('FAILURE');
         }
     };

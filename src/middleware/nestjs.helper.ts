@@ -68,7 +68,7 @@ export class NestJSCallbackHandler {
             const response = this.handler.getResponse(result);
 
             return res.status(response.status).send(response.body);
-        } catch (error) {
+        } catch {
             return res.status(500).send('FAILURE');
         }
     }
