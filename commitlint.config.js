@@ -14,14 +14,14 @@ export default {
                 'feat',     // A new feature
                 'fix',      // A bug fix
                 'docs',     // Documentation only changes
-                'style',    // Formatting, missing semi-colons, etc. (no code change)
+                // 'style',    // Formatting, missing semi-colons, etc. (no code change)
                 'refactor', // Refactoring
-                'perf',     // Performance improvements
+                // 'perf',     // Performance improvements
                 'test',     // Adding missing tests or correcting existing tests
                 'chore',    // Build process, auxiliary tools and libraries, dependency updates
-                'build',    // Build system or external dependencies (e.g. gulp, broccoli, npm)
+                // 'build',    // Build system or external dependencies (e.g. gulp, broccoli, npm)
                 'ci',       // Changes to CI configuration files and scripts (e.g. .travis.yml)
-                'revert'    // Reverting a previous commit
+                // 'revert'    // Reverting a previous commit
             ]
         ]
     }
