@@ -17,6 +17,7 @@
  * - Logger (level filtering, configureLogger, resetLogger)
  * - Deterministic hash anchor (known input → known output)
  * - Middleware (mock HTTP context)
+ * - Full CMI callback orderData fields (success + failure cases)
  */
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
@@ -1721,5 +1722,102 @@ describe('Audit Fixes & Regressions', () => {
         
         // The value should only be accessible through the getter method
         assert.strictEqual(secret.getValue(), 'super-secret-key-123');
+    });
+});
+
+// ===========================================================================
+// 21. Full CMI Callback orderData Fields
+// ===========================================================================
+describe('CallbackVerifier — full orderData fields', () => {
+    let gateway: CMIPaymentGateway;
+    beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
+
+    it('success: exposes returnCode, response, mdStatus, authCode', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '00',
+            TransId: 'TXN_FULL_TEST',
+            Response: 'Approved',
+            mdStatus: '1',
+            AuthCode: 'AUTH123',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.orderData!.returnCode, '00');
+        assert.strictEqual(result.orderData!.response, 'Approved');
+        assert.strictEqual(result.orderData!.mdStatus, '1');
+        assert.strictEqual(result.orderData!.authCode, 'AUTH123');
+    });
+
+    it('success: exposes cardholderName, maskedCardNumber, transactionDate', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '00',
+            EXTRA_CARDHOLDERNAME: 'Ahmed Bennani',
+            EXTRA_CARDNUMBER: '411111******1111',
+            EXTRA_TRXDATE: '20260506',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.orderData!.cardholderName, 'Ahmed Bennani');
+        assert.strictEqual(result.orderData!.maskedCardNumber, '411111******1111');
+        assert.strictEqual(result.orderData!.transactionDate, '20260506');
+    });
+
+    it('success: handles lowercase EXTRA field variants', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '00',
+            extra_cardholdername: 'Fatima Zahra',
+            extra_cardnumber: '****4242',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.orderData!.cardholderName, 'Fatima Zahra');
+        assert.strictEqual(result.orderData!.maskedCardNumber, '****4242');
+    });
+
+    it('failure: exposes returnCode, response, mdStatus, errorMessage in orderData', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '05',
+            Response: 'Error',
+            mdStatus: '0',
+            ErrMsg: 'Insufficient funds',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, false);
+        assert.strictEqual(result.errorCode, '05');
+        assert.strictEqual(result.errorMessage, 'Insufficient funds');
+        assert.strictEqual(result.orderData!.returnCode, '05');
+        assert.strictEqual(result.orderData!.response, 'Error');
+        assert.strictEqual(result.orderData!.mdStatus, '0');
+        assert.strictEqual(result.orderData!.errorMessage, 'Insufficient funds');
+    });
+
+    it('failure: handles lowercase errMsg variant', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '51',
+            errMsg: 'Card declined',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, false);
+        assert.strictEqual(result.errorMessage, 'Card declined');
+        assert.strictEqual(result.orderData!.errorMessage, 'Card declined');
+    });
+
+    it('success: backward compat — existing fields still present', () => {
+        const params = gateway.createPaymentParams({ ...validPaymentRequest, oid: 'COMPAT_ORDER' });
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '00',
+            TransId: 'TXN_COMPAT',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.orderData!.orderId, 'COMPAT_ORDER');
+        assert.strictEqual(result.orderData!.amount, 100);
+        assert.strictEqual(result.orderData!.currency, '504');
+        assert.strictEqual(result.orderData!.transactionId, 'TXN_COMPAT');
     });
 });
