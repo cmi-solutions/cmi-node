@@ -72,67 +72,167 @@ const gateway = new CMIPaymentGateway({
 
 ## 💻 Framework Examples
 
-### 1. Express.js
+### 1. Express.js (Full Example)
 
 ```typescript
+// server.ts
 import express from 'express';
 import { CMIPaymentGateway, createExpressMiddleware } from 'cmi-node';
 
 const app = express();
+
+// ⚠️ IMPORTANT: body parser MUST be registered before the callback route
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const gateway = new CMIPaymentGateway(config);
+// 1. Initialize the gateway
+const gateway = new CMIPaymentGateway({
+  storeKey: process.env.CMI_STORE_KEY!,
+  clientId: process.env.CMI_CLIENT_ID!,
+  gatewayUrl: 'https://testpayment.cmi.co.ma/fim/est3Dgate',
+  storetype: '3d_pay_hosting',
+  trantype: 'PreAuth',
+  callbackUrl: 'https://api.yoursite.com/payment/callback',
+  confirmationMode: 'auto', // 'auto' = ACTION=POSTAUTH | 'manual' = APPROVED
+  // accountType: 'inshore', // default — MAD only. Use 'offshore' for foreign currencies.
+});
 
-// Initiate Payment
+// 2. Initiate a payment — renders an auto-submitting HTML form
 app.get('/pay', (req, res) => {
   const params = gateway.createPaymentParams({
-    amount: 100.50,
-    BillToName: 'John Doe',
-    email: 'john@example.com',
+    amount: 150.00,
+    BillToName: 'Ahmed Bennani',
+    email: 'ahmed@example.com',
+    tel: '+212600000000',
     okUrl: 'https://yoursite.com/success',
     failUrl: 'https://yoursite.com/failure',
-    shopUrl: 'https://yoursite.com',   // required
-    currency: '504',                   // required — MAD numeric code
+    shopUrl: 'https://yoursite.com',
+    currency: '504',                     // MAD (required for inshore)
+    lang: 'fr',                          // 'fr' | 'en' | 'ar'
+    // Optional: display amount in foreign currency
+    // amountCur: 14.50,
+    // symbolCur: '978',                 // EUR
   });
-  
+
   const form = gateway.generatePaymentForm(params);
+  res.setHeader('Content-Type', 'text/html');
   res.send(form);
 });
 
-// Handle Callback
+// 3. Handle CMI callback — SDK verifies hash & sends response automatically
 app.post('/payment/callback', createExpressMiddleware(gateway, {
   onSuccess: async (result) => {
-    console.log('Payment Successful:', result.orderData);
+    console.log('✅ Payment verified:', result.orderData);
+    // IMPORTANT: check idempotency — prevent processing the same order twice
+    const order = await db.orders.findOne({ id: result.orderData.orderId });
+    if (order?.status === 'paid') return; // Already processed
+    await db.orders.update(result.orderData.orderId, {
+      status: 'paid',
+      transactionId: result.orderData.transactionId,
+      amount: result.orderData.amount,
+    });
   },
   onFailure: (result) => {
-    console.error('Payment Failed:', result.message);
-  }
+    console.error('❌ Payment failed:', result.message, result.errorCode);
+  },
 }));
+
+// 4. Success/Failure redirect pages
+app.get('/success', (req, res) => res.send('Payment successful! Thank you.'));
+app.get('/failure', (req, res) => res.send('Payment failed. Please try again.'));
+
+app.listen(3000, () => console.log('Server running on http://localhost:3000'));
 ```
 
-### 2. NestJS
+### 2. NestJS (Full Example)
 
 ```typescript
-// payment.controller.ts
-import { Controller, Post, Body, Res } from '@nestjs/common';
+// ──────────────────────────────────────────────
+// 1. payment.module.ts
+// ──────────────────────────────────────────────
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { PaymentController } from './payment.controller';
+import { PaymentService } from './payment.service';
+
+@Module({
+  imports: [ConfigModule],
+  controllers: [PaymentController],
+  providers: [PaymentService],
+})
+export class PaymentModule {}
+
+// ──────────────────────────────────────────────
+// 2. payment.service.ts
+// ──────────────────────────────────────────────
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { CMIPaymentGateway, NestJSCallbackHandler } from 'cmi-node';
+
+@Injectable()
+export class PaymentService {
+  public readonly gateway: CMIPaymentGateway;
+  public readonly callbackHandler: NestJSCallbackHandler;
+
+  constructor(private config: ConfigService) {
+    this.gateway = new CMIPaymentGateway({
+      storeKey: this.config.getOrThrow('CMI_STORE_KEY'),
+      clientId: this.config.getOrThrow('CMI_CLIENT_ID'),
+      gatewayUrl: 'https://testpayment.cmi.co.ma/fim/est3Dgate',
+      storetype: '3d_pay_hosting',
+      trantype: 'PreAuth',
+      callbackUrl: this.config.getOrThrow('CMI_CALLBACK_URL'),
+      confirmationMode: 'auto',
+      // accountType: 'inshore', // default
+    });
+
+    this.callbackHandler = new NestJSCallbackHandler(this.gateway, {
+      onSuccess: async (result) => {
+        console.log('✅ Payment verified:', result.orderData);
+        // IMPORTANT: check idempotency
+        // await this.ordersService.markAsPaid(result.orderData?.orderId);
+      },
+      onFailure: async (result) => {
+        console.error('❌ Payment failed:', result.message);
+      },
+    });
+  }
+}
+
+// ──────────────────────────────────────────────
+// 3. payment.controller.ts
+// ──────────────────────────────────────────────
+import { Controller, Get, Post, Query, Body, Res } from '@nestjs/common';
+import { Response } from 'express';
+import { PaymentService } from './payment.service';
 
 @Controller('payment')
 export class PaymentController {
-  private callbackHandler: NestJSCallbackHandler;
+  constructor(private readonly paymentService: PaymentService) {}
 
-  constructor() {
-    const gateway = new CMIPaymentGateway(config);
-    this.callbackHandler = new NestJSCallbackHandler(gateway, {
-      onSuccess: async (result) => {
-        // Handle success
-      }
+  // Initiate a payment — returns auto-submitting HTML form
+  @Get('pay')
+  pay(@Query('amount') amount: string, @Res() res: Response) {
+    const params = this.paymentService.gateway.createPaymentParams({
+      amount: parseFloat(amount) || 100,
+      BillToName: 'Ahmed Bennani',
+      email: 'ahmed@example.com',
+      okUrl: 'https://yoursite.com/success',
+      failUrl: 'https://yoursite.com/failure',
+      shopUrl: 'https://yoursite.com',
+      currency: '504',
+      lang: 'fr',
     });
+
+    const form = this.paymentService.gateway.generatePaymentForm(params);
+    res.setHeader('Content-Type', 'text/html');
+    return res.send(form);
   }
 
+  // Handle CMI callback
   @Post('callback')
-  async handleCallback(@Body() body: any, @Res() res: any) {
-    return this.callbackHandler.handle(body, res);
+  async handleCallback(@Body() body: any, @Res() res: Response) {
+    return this.paymentService.callbackHandler.handle(body, res);
   }
 }
 ```
@@ -158,25 +258,88 @@ export async function POST(request: NextRequest) {
 ### 4. Fastify
 
 ```typescript
-import { createFastifyHandler } from 'cmi-node';
+import Fastify from 'fastify';
+import { CMIPaymentGateway, createFastifyHandler } from 'cmi-node';
 
+const fastify = Fastify();
+
+const gateway = new CMIPaymentGateway({
+  storeKey: process.env.CMI_STORE_KEY!,
+  clientId: process.env.CMI_CLIENT_ID!,
+  gatewayUrl: 'https://testpayment.cmi.co.ma/fim/est3Dgate',
+  storetype: '3d_pay_hosting',
+  trantype: 'PreAuth',
+  callbackUrl: 'https://yoursite.com/cmi/callback',
+  confirmationMode: 'auto',
+});
+
+// Initiate payment
+fastify.get('/pay', async (request, reply) => {
+  const params = gateway.createPaymentParams({
+    amount: 200,
+    BillToName: 'Youssef Alaoui',
+    email: 'youssef@example.com',
+    okUrl: 'https://yoursite.com/success',
+    failUrl: 'https://yoursite.com/failure',
+    shopUrl: 'https://yoursite.com',
+    currency: '504',
+  });
+  return reply.type('text/html').send(gateway.generatePaymentForm(params));
+});
+
+// Handle callback
 fastify.post('/cmi/callback', createFastifyHandler(gateway, {
   onSuccess: async (result) => {
-    // Process payment
-  }
+    await db.orders.update(result.orderData?.orderId, { status: 'paid' });
+  },
+  onFailure: (result) => {
+    console.error('Payment failed:', result.message);
+  },
 }));
+
+fastify.listen({ port: 3000 });
 ```
 
 ### 5. Hono
 
 ```typescript
-import { createHonoHandler } from 'cmi-node';
+import { Hono } from 'hono';
+import { CMIPaymentGateway, createHonoHandler } from 'cmi-node';
 
+const app = new Hono();
+
+const gateway = new CMIPaymentGateway({
+  storeKey: process.env.CMI_STORE_KEY!,
+  clientId: process.env.CMI_CLIENT_ID!,
+  gatewayUrl: 'https://testpayment.cmi.co.ma/fim/est3Dgate',
+  storetype: '3d_pay_hosting',
+  trantype: 'PreAuth',
+  callbackUrl: 'https://yoursite.com/cmi/callback',
+  confirmationMode: 'auto',
+});
+
+// Initiate payment
+app.get('/pay', (c) => {
+  const params = gateway.createPaymentParams({
+    amount: 300,
+    BillToName: 'Fatima Zahra',
+    email: 'fatima@example.com',
+    okUrl: 'https://yoursite.com/success',
+    failUrl: 'https://yoursite.com/failure',
+    shopUrl: 'https://yoursite.com',
+    currency: '504',
+  });
+  return c.html(gateway.generatePaymentForm(params));
+});
+
+// Handle callback
 app.post('/cmi/callback', createHonoHandler(gateway, {
   onSuccess: async (result) => {
-    // Process payment
-  }
+    await db.orders.update(result.orderData?.orderId, { status: 'paid' });
+  },
 }));
+
+export default app;
 ```
 
 ### 6. Koa
@@ -506,6 +669,30 @@ npm run lint
 # Format code
 npm run format
 ```
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read the [CONTRIBUTING.md](./CONTRIBUTING.md) before submitting a pull request.
+
+**Quick rules:**
+
+- **Commit messages** must follow [Conventional Commits](https://www.conventionalcommits.org/):
+  ```
+  feat: add offline mode support
+  fix(core): resolve hash mismatch on callback
+  ```
+  Allowed types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`
+
+- **Branch names** must follow `<type>/<short-description>`:
+  ```
+  feature/add-refund
+  fix/callback-bug
+  ```
+  Allowed types: `feature`, `fix`, `chore`, `docs`, `refactor`, `release`, `ci`, `test`
+
+- All commits, pushes, and PRs are validated automatically via Git hooks and CI.
 
 ---
 
