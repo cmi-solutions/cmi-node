@@ -480,11 +480,11 @@ describe('HashUtil', () => {
      *     let hashval = '';
      *     for (const k of sorted) {
      *       if (k.toLowerCase() !== 'hash' && k.toLowerCase() !== 'encoding') {
-     *         const v = String(params[k]).trim().replace(/\\\\/g,'\\\\\\\\').replace(/\|/g,'\\\\|');
+     *         const v = String(params[k]).trim().replace(/\\\\/g,'\\\\\\\\').replace(/\\|/g,'\\\\|');
      *         hashval += v + '|';
      *       }
      *     }
-     *     const ek = key.replace(/\\\\/g,'\\\\\\\\').replace(/\|/g,'\\\\|');
+     *     const ek = key.replace(/\\\\/g,'\\\\\\\\').replace(/\\|/g,'\\\\|');
      *     hashval += ek;
      *     const hex = crypto.createHash('sha512').update(hashval,'utf8').digest('hex');
      *     console.log(Buffer.from(hex,'hex').toString('base64'));
@@ -723,6 +723,34 @@ describe('PaymentValidator', () => {
         assert.throws(
             () => PaymentValidator.checkDuplicateFields({ BillToName: 'A', billtoname: 'B' }),
             /Duplicate fields/
+        );
+    });
+
+    // ── FIX 2: sessiontimeout validation ──────────────────────────────────────
+    it('sessiontimeout: accepts valid value (within 30–2700)', () => {
+        assert.doesNotThrow(() =>
+            PaymentValidator.validate({ ...validPaymentRequest, sessiontimeout: 1800 } as any)
+        );
+    });
+
+    it('sessiontimeout: throws for value below minimum (< 30)', () => {
+        assert.throws(
+            () => PaymentValidator.validate({ ...validPaymentRequest, sessiontimeout: 10 } as any),
+            /sessiontimeout.*30/i
+        );
+    });
+
+    it('sessiontimeout: throws for value above maximum (> 2700)', () => {
+        assert.throws(
+            () => PaymentValidator.validate({ ...validPaymentRequest, sessiontimeout: 3000 } as any),
+            /sessiontimeout.*2700/i
+        );
+    });
+
+    it('sessiontimeout: throws for non-number value', () => {
+        assert.throws(
+            () => PaymentValidator.validate({ ...validPaymentRequest, sessiontimeout: 'fast' } as any),
+            /sessiontimeout/i
         );
     });
 });
@@ -1749,32 +1777,46 @@ describe('CallbackVerifier — full orderData fields', () => {
         assert.strictEqual(result.orderData!.authCode, 'AUTH123');
     });
 
-    it('success: exposes cardholderName, maskedCardNumber, transactionDate', () => {
+    it('success: exposes cardHolderName, maskedPan, transactionDate', () => {
         const params = gateway.createPaymentParams(validPaymentRequest);
         const cb = simulateCMICallback(params, validConfig.storeKey, {
             ProcReturnCode: '00',
-            EXTRA_CARDHOLDERNAME: 'Ahmed Bennani',
-            EXTRA_CARDNUMBER: '411111******1111',
-            EXTRA_TRXDATE: '20260506',
+            // Exact CMI field names as sent in the callback POST body
+            cardHolderName: 'Ahmed Bennani',
+            MaskedPan: '400000XXXXXX7190',
+            'EXTRA.TRXDATE': '06/05/2026 21:00:00',
         });
         const result = gateway.verifyCallback(cb);
         assert.strictEqual(result.success, true);
-        assert.strictEqual(result.orderData!.cardholderName, 'Ahmed Bennani');
-        assert.strictEqual(result.orderData!.maskedCardNumber, '411111******1111');
-        assert.strictEqual(result.orderData!.transactionDate, '20260506');
+        // orderData property names match the type definition
+        assert.strictEqual(result.orderData!.cardHolderName, 'Ahmed Bennani');
+        assert.strictEqual(result.orderData!.maskedPan, '400000XXXXXX7190');
+        assert.strictEqual(result.orderData!.transactionDate, '06/05/2026 21:00:00');
     });
 
-    it('success: handles lowercase EXTRA field variants', () => {
+    it('success: handles lowercase cardHolderName + maskedPan variants', () => {
         const params = gateway.createPaymentParams(validPaymentRequest);
+        // Some CMI environments send lowercase keys
         const cb = simulateCMICallback(params, validConfig.storeKey, {
             ProcReturnCode: '00',
-            extra_cardholdername: 'Fatima Zahra',
-            extra_cardnumber: '****4242',
+            CardHolderName: 'Fatima Zahra',
+            maskedPan: '411111XXXXXX4242',
         });
         const result = gateway.verifyCallback(cb);
         assert.strictEqual(result.success, true);
-        assert.strictEqual(result.orderData!.cardholderName, 'Fatima Zahra');
-        assert.strictEqual(result.orderData!.maskedCardNumber, '****4242');
+        assert.strictEqual(result.orderData!.cardHolderName, 'Fatima Zahra');
+        assert.strictEqual(result.orderData!.maskedPan, '411111XXXXXX4242');
+    });
+
+    it('success: handles lowercase EXTRA.TRXDATE variant', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '00',
+            'EXTRA.trxdate': '06052026 210000',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.orderData!.transactionDate, '06052026 210000');
     });
 
     it('failure: exposes returnCode, response, mdStatus, errorMessage in orderData', () => {
