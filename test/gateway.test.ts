@@ -17,6 +17,7 @@
  * - Logger (level filtering, configureLogger, resetLogger)
  * - Deterministic hash anchor (known input → known output)
  * - Middleware (mock HTTP context)
+ * - Full CMI callback orderData fields (success + failure cases)
  */
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
@@ -479,11 +480,11 @@ describe('HashUtil', () => {
      *     let hashval = '';
      *     for (const k of sorted) {
      *       if (k.toLowerCase() !== 'hash' && k.toLowerCase() !== 'encoding') {
-     *         const v = String(params[k]).trim().replace(/\\\\/g,'\\\\\\\\').replace(/\|/g,'\\\\|');
+     *         const v = String(params[k]).trim().replace(/\\\\/g,'\\\\\\\\').replace(/\\|/g,'\\\\|');
      *         hashval += v + '|';
      *       }
      *     }
-     *     const ek = key.replace(/\\\\/g,'\\\\\\\\').replace(/\|/g,'\\\\|');
+     *     const ek = key.replace(/\\\\/g,'\\\\\\\\').replace(/\\|/g,'\\\\|');
      *     hashval += ek;
      *     const hex = crypto.createHash('sha512').update(hashval,'utf8').digest('hex');
      *     console.log(Buffer.from(hex,'hex').toString('base64'));
@@ -722,6 +723,34 @@ describe('PaymentValidator', () => {
         assert.throws(
             () => PaymentValidator.checkDuplicateFields({ BillToName: 'A', billtoname: 'B' }),
             /Duplicate fields/
+        );
+    });
+
+    // ── FIX 2: sessiontimeout validation ──────────────────────────────────────
+    it('sessiontimeout: accepts valid value (within 30–2700)', () => {
+        assert.doesNotThrow(() =>
+            PaymentValidator.validate({ ...validPaymentRequest, sessiontimeout: 1800 } as any)
+        );
+    });
+
+    it('sessiontimeout: throws for value below minimum (< 30)', () => {
+        assert.throws(
+            () => PaymentValidator.validate({ ...validPaymentRequest, sessiontimeout: 10 } as any),
+            /sessiontimeout.*30/i
+        );
+    });
+
+    it('sessiontimeout: throws for value above maximum (> 2700)', () => {
+        assert.throws(
+            () => PaymentValidator.validate({ ...validPaymentRequest, sessiontimeout: 3000 } as any),
+            /sessiontimeout.*2700/i
+        );
+    });
+
+    it('sessiontimeout: throws for non-number value', () => {
+        assert.throws(
+            () => PaymentValidator.validate({ ...validPaymentRequest, sessiontimeout: 'fast' } as any),
+            /sessiontimeout/i
         );
     });
 });
@@ -1721,5 +1750,116 @@ describe('Audit Fixes & Regressions', () => {
         
         // The value should only be accessible through the getter method
         assert.strictEqual(secret.getValue(), 'super-secret-key-123');
+    });
+});
+
+// ===========================================================================
+// 21. Full CMI Callback orderData Fields
+// ===========================================================================
+describe('CallbackVerifier — full orderData fields', () => {
+    let gateway: CMIPaymentGateway;
+    beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
+
+    it('success: exposes returnCode, response, mdStatus, authCode', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '00',
+            TransId: 'TXN_FULL_TEST',
+            Response: 'Approved',
+            mdStatus: '1',
+            AuthCode: 'AUTH123',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.orderData!.returnCode, '00');
+        assert.strictEqual(result.orderData!.response, 'Approved');
+        assert.strictEqual(result.orderData!.mdStatus, '1');
+        assert.strictEqual(result.orderData!.authCode, 'AUTH123');
+    });
+
+    it('success: exposes cardHolderName, maskedPan, transactionDate', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '00',
+            // Exact CMI field names as sent in the callback POST body
+            cardHolderName: 'Ahmed Bennani',
+            MaskedPan: '400000XXXXXX7190',
+            'EXTRA.TRXDATE': '06/05/2026 21:00:00',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true);
+        // orderData property names match the type definition
+        assert.strictEqual(result.orderData!.cardHolderName, 'Ahmed Bennani');
+        assert.strictEqual(result.orderData!.maskedPan, '400000XXXXXX7190');
+        assert.strictEqual(result.orderData!.transactionDate, '06/05/2026 21:00:00');
+    });
+
+    it('success: handles lowercase cardHolderName + maskedPan variants', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        // Some CMI environments send lowercase keys
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '00',
+            CardHolderName: 'Fatima Zahra',
+            maskedPan: '411111XXXXXX4242',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.orderData!.cardHolderName, 'Fatima Zahra');
+        assert.strictEqual(result.orderData!.maskedPan, '411111XXXXXX4242');
+    });
+
+    it('success: handles lowercase EXTRA.TRXDATE variant', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '00',
+            'EXTRA.trxdate': '06052026 210000',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.orderData!.transactionDate, '06052026 210000');
+    });
+
+    it('failure: exposes returnCode, response, mdStatus, errorMessage in orderData', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '05',
+            Response: 'Error',
+            mdStatus: '0',
+            ErrMsg: 'Insufficient funds',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, false);
+        assert.strictEqual(result.errorCode, '05');
+        assert.strictEqual(result.errorMessage, 'Insufficient funds');
+        assert.strictEqual(result.orderData!.returnCode, '05');
+        assert.strictEqual(result.orderData!.response, 'Error');
+        assert.strictEqual(result.orderData!.mdStatus, '0');
+        assert.strictEqual(result.orderData!.errorMessage, 'Insufficient funds');
+    });
+
+    it('failure: handles lowercase errMsg variant', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '51',
+            errMsg: 'Card declined',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, false);
+        assert.strictEqual(result.errorMessage, 'Card declined');
+        assert.strictEqual(result.orderData!.errorMessage, 'Card declined');
+    });
+
+    it('success: backward compat — existing fields still present', () => {
+        const params = gateway.createPaymentParams({ ...validPaymentRequest, oid: 'COMPAT_ORDER' });
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '00',
+            TransId: 'TXN_COMPAT',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.orderData!.orderId, 'COMPAT_ORDER');
+        assert.strictEqual(result.orderData!.amount, 100);
+        assert.strictEqual(result.orderData!.currency, '504');
+        assert.strictEqual(result.orderData!.transactionId, 'TXN_COMPAT');
     });
 });

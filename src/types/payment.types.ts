@@ -3,6 +3,22 @@ import { Language } from "@constants";
 
 export type CurrencyInput = CurrencyCode | string;
 
+/**
+ * Item-level fields (optional, dynamic naming):
+ * CMI supports per-item order details using numbered field names.
+ * Example for item N=1:
+ *   id1, itemnumber1, productcode1, qty1, desc1, price1, total1
+ *
+ * These are passed as custom fields and are not strictly typed.
+ * Example:
+ *   gateway.createPaymentParams({
+ *     ...baseParams,
+ *     id1: 'ITEM-001',
+ *     qty1: 2,
+ *     price1: 14.99,
+ *     total1: 29.98,
+ *   })
+ */
 export interface PaymentRequest {
   amount: number | string;
   /** Order ID. Auto-generated if omitted. */
@@ -37,6 +53,24 @@ export interface PaymentRequest {
 
   amountCur?: number;
   symbolCur?: string;
+
+  /**
+   * Session timeout in seconds for the CMI hosted payment page.
+   * Min: 30, Max: 2700, Default: 1800.
+   */
+  sessiontimeout?: number;
+
+  /**
+   * When true, CMI redirects the customer back to okUrl/failUrl via GET
+   * instead of the default POST.
+   */
+  redirectGet?: boolean;
+
+  /**
+   * Enables or disables the server-to-server callback for this specific
+   * payment request. Default: true.
+   */
+  CallbackResponse?: boolean;
 
   /** @deprecated Use `tel` instead. This field will throw at runtime. */
   phone?: never;
