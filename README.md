@@ -11,12 +11,41 @@ The `cmi-node` package provides a seamless way to integrate the Centre Monétiqu
 
 ## 🚀 Features
 
-- **Framework Agnostic**: Works with Express, NestJS, Next.js, Fastify, Hono, Koa, and more.
+- **Framework Agnostic**: Works with Express, NestJS, Next.js, Fastify, Hono, and more.
 - **Type Safe**: Fully written in TypeScript with comprehensive type definitions.
 - **Secure by Design**: Built-in hash verification (SHA-512) and timing-safe comparisons.
 - **Flexible Callbacks**: Support for both 'auto' and 'manual' confirmation modes.
 - **Middleware Helpers**: Pre-built helpers for popular frameworks to get you started in minutes.
 - **No External Runtime Dependencies**: Uses only Node.js built-ins (`crypto`, `buffer`). Requires Node.js ≥ 18.
+
+---
+
+## 🔄 Payment Flow
+
+```mermaid
+sequenceDiagram
+    participant Customer
+    participant YourServer as Your Server
+    participant SDK as cmi-node SDK
+    participant CMI as CMI Gateway
+
+    Customer->>YourServer: 1. Clicks "Pay"
+    YourServer->>SDK: 2. createPaymentParams(request)
+    SDK-->>YourServer: Payment params + HASH
+    YourServer->>SDK: 3. generatePaymentForm(params)
+    SDK-->>YourServer: Auto-submitting HTML form
+    YourServer-->>Customer: 4. HTML form (auto-redirects)
+    Customer->>CMI: 5. Form submits to CMI gateway
+    CMI->>Customer: 6. 3D Secure / Payment page
+    Customer->>CMI: 7. Enters card details
+    CMI->>YourServer: 8. POST callbackUrl (payment result + HASH)
+    YourServer->>SDK: 9. verifyCallback(params)
+    SDK-->>YourServer: CallbackResult (success/failure)
+    YourServer-->>CMI: 10. Response (ACTION=POSTAUTH / APPROVED / FAILURE)
+    CMI-->>Customer: 11. Redirect to okUrl or failUrl
+```
+
+> **Note:** Step 8 (callback) only happens if `callbackUrl` is configured. Without it, payment confirmation must be done manually via the CMI Back Office.
 
 ---
 
@@ -342,34 +371,6 @@ app.post('/cmi/callback', createHonoHandler(gateway, {
 export default app;
 ```
 
-### 6. Koa
-
-```typescript
-import Koa from 'koa';
-import bodyParser from 'koa-bodyparser';
-import { CMIPaymentGateway } from 'cmi-node';
-
-const app = new Koa();
-app.use(bodyParser());
-
-const gateway = new CMIPaymentGateway(config);
-
-app.use(async (ctx) => {
-  if (ctx.method === 'POST' && ctx.path === '/payment/callback') {
-    const result = gateway.verifyCallback(ctx.request.body);
-
-    if (result.success) {
-      await updateOrder(result.orderData.orderId, 'paid');
-      ctx.status = 200;
-      ctx.body = result.status; // 'ACTION=POSTAUTH' or 'APPROVED'
-    } else {
-      ctx.status = 200;
-      ctx.body = 'FAILURE';
-    }
-  }
-});
-```
-
 ---
 
 ## 📖 API Reference
@@ -393,8 +394,8 @@ new CMIPaymentGateway(config: PaymentConfig, options?: CMIPaymentGatewayOptions)
 | `gatewayUrl` | `string` | ✅ | CMI gateway URL (must use `http://` or `https://`) |
 | `storetype` | `string` | ✅ | Store type (`3d_pay_hosting`, `3d`, `pay_hosting`, etc.) |
 | `trantype` | `string` | ✅ | Transaction type (case-insensitive: `preauth`, `auth`, `postauth`, `void`, `credit`) |
-| `accountType` | `string` | ❌ | Account type: `'inshore'` (default) or `'offshore'`. See [Account Types](#-account-types) below. |
-| `callbackUrl` | `string` | ❌ | Callback URL for payment notifications |
+| `accountType` | `string` | ❌ | Account type: `'inshore'` (default) or `'offshore'`. Offshore requires prior approval from CMI's commercial department. See [Account Types](#-account-types). |
+| `callbackUrl` | `string` | ❌ | Callback URL for payment notifications. If omitted, payment confirmation will **not** be triggered automatically — the merchant must confirm manually via the CMI Back Office. |
 
 #### `CMIPaymentGatewayOptions`
 
@@ -572,6 +573,8 @@ The SDK supports two account types that affect currency and multi-currency behav
 | `'inshore'` (default) | MAD only (`"504"` or `"MAD"`) | ✅ Allowed | Standard Moroccan merchant account. Use `amountCur`/`symbolCur` to display a foreign currency equivalent. |
 | `'offshore'` | Any supported currency | ❌ Not allowed | Offshore merchant account that processes in a foreign currency directly. |
 
+> ⚠️ **Important:** The `'offshore'` account type is **not enabled by default**. To use offshore processing, you must contact the CMI commercial department and request activation. The option will not work on your account until it has been approved.
+
 ```typescript
 // Inshore (default) — process in MAD, display in EUR
 const inshoreGateway = new CMIPaymentGateway({
@@ -579,12 +582,19 @@ const inshoreGateway = new CMIPaymentGateway({
   // accountType: 'inshore' is the default
 });
 
-// Offshore — process directly in USD
+// Offshore — process directly in USD (requires CMI commercial approval)
 const offshoreGateway = new CMIPaymentGateway({
   ...config,
   accountType: 'offshore',
 });
 ```
+
+### Callback URL Behavior
+
+The `callbackUrl` field is **optional** in the gateway configuration:
+
+- **With `callbackUrl`**: CMI sends a server-to-server POST to your endpoint after the payment. The SDK verifies the hash and triggers your `onSuccess`/`onFailure` handlers automatically.
+- **Without `callbackUrl`**: The payment still processes, but **no automatic confirmation is sent**. The merchant must manually confirm or void the transaction via the **CMI Back Office**.
 
 ---
 
