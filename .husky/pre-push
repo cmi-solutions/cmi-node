@@ -1,5 +1,5 @@
 branch=$(git symbolic-ref --short HEAD)
-pattern='^(main|develop|preprod|(feature|fix|chore|docs|refactor|release)\/[a-z0-9-]+)$'
+pattern='^(main|develop|preprod|(feature|fix|chore|docs|refactor|release|ci)\/[a-z0-9-]+)$'
 
 if ! echo "$branch" | grep -qE "$pattern"; then
   echo "❌ Invalid branch name: '$branch'"
