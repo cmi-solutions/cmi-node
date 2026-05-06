@@ -71,8 +71,6 @@ export class PaymentValidator extends Validator {
     // Check for duplicate/conflicting field names (case-insensitive)
     this.checkDuplicateFields(request);
 
-    // TODO : add a check duplicates for the accountType
-
     // Validate amount exists and is a valid number
     if (request.amount === undefined || request.amount === null) {
       throw new Error("Amount is required");
@@ -227,16 +225,14 @@ export class PaymentValidator extends Validator {
       }
     }
 
-    // Validate rnd if provided - must be non-empty
+    // Validate rnd if provided - must be a non-empty string within length limit.
+    // The CMI spec does not restrict rnd to alphabetic characters only.
     if (request.rnd !== undefined) {
       if (typeof request.rnd !== 'string' || request.rnd.trim().length === 0) {
         throw new Error("rnd must be a non-empty string when provided");
       }
       if (request.rnd.length > 20) {
         throw new Error("rnd cannot exceed 20 characters");
-      }
-      if (!/^[a-zA-Z]+$/.test(request.rnd)) {
-        throw new Error("rnd must be purely alphabetic");
       }
     }
 
