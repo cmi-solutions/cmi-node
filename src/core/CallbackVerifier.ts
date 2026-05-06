@@ -34,6 +34,18 @@ export class CallbackVerifier {
     }
 
     /**
+     * Resolve a field from callbackParams by trying multiple key variants
+     */
+    private static resolveField(params: Record<string, any>, ...keys: string[]): string | undefined {
+        for (const key of keys) {
+            if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
+                return String(params[key]);
+            }
+        }
+        return undefined;
+    }
+
+    /**
      * Verify callback from CMI
      *
      * Validates the hash (HASH #2 - Incoming) and returns payment status
@@ -42,8 +54,6 @@ export class CallbackVerifier {
      * @returns Callback verification result
      */
     verify(callbackParams: Record<string, any>): CallbackResult {
-
-
         try {
             // Extract received hash
             const receivedHash = callbackParams.HASH || callbackParams.hash;
@@ -68,8 +78,6 @@ export class CallbackVerifier {
             // Recalculate hash (HASH #2 - Verify)
             const calculatedHash = HashUtil.generate(paramsForHash, this.config.storeKey);
 
-
-
             // Verify hash using constant-time comparison (prevents timing attacks)
             if (!timingSafeCompare(receivedHash, calculatedHash)) {
                 return {
@@ -85,23 +93,39 @@ export class CallbackVerifier {
                 callbackParams.ProcReturnCode ?? callbackParams.ReturnCode ?? ''
             );
 
+            // Resolve all fields using both casing variants
+            const transactionId =
+                CallbackVerifier.resolveField(callbackParams, 'TransId', 'transId') ??
+                callbackParams.oid;
+
+            const response = CallbackVerifier.resolveField(callbackParams, 'Response', 'response');
+            const mdStatus = CallbackVerifier.resolveField(callbackParams, 'mdStatus', 'MdStatus', 'MDSTATUS');
+            const errMsg = CallbackVerifier.resolveField(callbackParams, 'ErrMsg', 'errMsg', 'ERRMSG');
+            const authCode = CallbackVerifier.resolveField(callbackParams, 'AuthCode', 'authCode', 'AUTHCODE');
+            const cardholderName = CallbackVerifier.resolveField(callbackParams, 'EXTRA_CARDHOLDERNAME', 'extra_cardholdername');
+            const maskedCardNumber = CallbackVerifier.resolveField(callbackParams, 'EXTRA_CARDNUMBER', 'extra_cardnumber');
+            const transactionDate = CallbackVerifier.resolveField(callbackParams, 'EXTRA_TRXDATE', 'extra_trxdate');
+
             // Check payment status
             if (returnCode === '00') {
-                // Get response based on confirmation mode
-                const response = this.getConfirmationResponse();
+                const confirmationResponse = this.getConfirmationResponse();
 
                 return {
                     success: true,
-                    status: response,
+                    status: confirmationResponse,
                     message: 'Payment successful',
                     orderData: {
                         orderId: callbackParams.oid,
                         amount: CallbackVerifier.safeParseAmount(callbackParams.amount),
                         currency: callbackParams.currency,
-                        transactionId:
-                            callbackParams.TransId ||
-                            callbackParams.transId ||
-                            callbackParams.oid,
+                        transactionId,
+                        returnCode,
+                        response,
+                        mdStatus,
+                        authCode,
+                        cardholderName,
+                        maskedCardNumber,
+                        transactionDate,
                     },
                 };
             } else {
@@ -110,15 +134,16 @@ export class CallbackVerifier {
                     status: 'FAILURE',
                     message: `Payment failed with return code: ${returnCode}`,
                     errorCode: returnCode,
-                    errorMessage: callbackParams.ErrMsg || callbackParams.errMsg,
+                    errorMessage: errMsg,
                     orderData: {
                         orderId: callbackParams.oid,
                         amount: CallbackVerifier.safeParseAmount(callbackParams.amount),
                         currency: callbackParams.currency,
-                        transactionId:
-                            callbackParams.TransId ||
-                            callbackParams.transId ||
-                            callbackParams.oid,
+                        transactionId,
+                        returnCode,
+                        response,
+                        mdStatus,
+                        errorMessage: errMsg,
                     },
                 };
             }
@@ -127,8 +152,9 @@ export class CallbackVerifier {
             return {
                 success: false,
                 status: 'FAILURE',
-                message: `Error verifying callback: ${error instanceof Error ? error.message : String(error)
-                    }`,
+                message: `Error verifying callback: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
             };
         }
     }
