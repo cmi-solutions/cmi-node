@@ -74,7 +74,7 @@ export function createNextJsHandler(
             const response = handler.getResponse(result);
 
             return res.status(response.status).send(response.body);
-        } catch (error) {
+        } catch {
             return res.status(500).send('FAILURE');
         }
     };
@@ -140,7 +140,7 @@ export async function handleNextJsCallback(
             status: response.status,
             headers: { 'Content-Type': 'text/plain' }
         });
-    } catch (error) {
+    } catch {
         return new Response('FAILURE', {
             status: 500,
             headers: { 'Content-Type': 'text/plain' }

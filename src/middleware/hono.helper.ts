@@ -65,7 +65,7 @@ export function createHonoHandler(
 
             // Hono uses c.text() or c.body()
             return c.text(response.body, response.status);
-        } catch (error) {
+        } catch {
             return c.text('FAILURE', 500);
         }
     };
