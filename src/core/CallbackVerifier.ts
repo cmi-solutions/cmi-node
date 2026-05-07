@@ -100,9 +100,11 @@ export class CallbackVerifier {
 
             // ── Resolve all callback fields (case variants) ───────────────────────
 
+            // transactionId maps strictly to TransId / transId.
+            // oid / ReturnOid is the order identifier — a completely different field.
+            // If TransId is absent from the payload, transactionId is simply undefined.
             const transactionId =
-                CallbackVerifier.resolveField(callbackParams, 'TransId', 'transId') ??
-                callbackParams.oid;
+                CallbackVerifier.resolveField(callbackParams, 'TransId', 'transId');
 
             // Always present (success + failure)
             const response    = CallbackVerifier.resolveField(callbackParams, 'Response',   'response');

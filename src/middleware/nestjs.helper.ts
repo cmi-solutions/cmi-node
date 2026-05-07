@@ -3,6 +3,7 @@
 import { CallbackHandler } from "@core/CallbackHandler";
 import { CMIPaymentGateway } from "@core/CMIPaymentGateway";
 import { CallbackHandlerOptions, CallbackResult } from "@types";
+import { logger } from "@logger";
 
 /**
  * NestJS callback handler wrapper
@@ -68,7 +69,8 @@ export class NestJSCallbackHandler {
             const response = this.handler.getResponse(result);
 
             return res.status(response.status).send(response.body);
-        } catch {
+        } catch (error) {
+            logger.error('NestJS callback handler error:', error);
             return res.status(500).send('FAILURE');
         }
     }
