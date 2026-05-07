@@ -23,6 +23,7 @@ export interface PaymentBuilderConfig {
     trantype: string;
     accountType: AccountTypeValue;
     callbackUrl?: string;
+    confirmationMode?: string;
 }
 
 /**
@@ -79,8 +80,12 @@ export class PaymentBuilder {
         // Validator ensures if provided, it must be 'UTF-8'
         params.encoding = paymentRequest.encoding ?? 'UTF-8';
 
-        // Add callbackUrl if provided in config
-        if (this.config.callbackUrl) {
+        // When CallbackResponse is explicitly false, the server-to-server callback
+        // is disabled for this specific payment. In that case callbackUrl must NOT
+        // be sent to CMI, and confirmationMode is irrelevant so we omit it too.
+        const callbackDisabled = paymentRequest.CallbackResponse === false;
+
+        if (!callbackDisabled && this.config.callbackUrl) {
             params.callbackUrl = this.config.callbackUrl;
         }
 
@@ -90,6 +95,25 @@ export class PaymentBuilder {
         // Add AutoRedirect - use provided value or default to false
         // Validator ensures if provided, it must be a boolean
         params.AutoRedirect = FormatterUtil.formatAutoRedirect(paymentRequest.AutoRedirect ?? false);
+
+        // Explicitly forward redirectGet when provided.
+        // Must be set before addCustomFields so it is not accidentally
+        // treated as a passthrough custom field.
+        if (paymentRequest.redirectGet !== undefined) {
+            params.redirectGet = paymentRequest.redirectGet;
+        }
+
+        // Forward CallbackResponse when explicitly set.
+        // false → server-to-server callback disabled (callbackUrl already suppressed above).
+        // true  → callback enabled (default CMI behaviour, explicit opt-in).
+        if (paymentRequest.CallbackResponse !== undefined) {
+            params.CallbackResponse = paymentRequest.CallbackResponse;
+        }
+
+        // Explicitly forward sessiontimeout when provided.
+        if (paymentRequest.sessiontimeout !== undefined) {
+            params.sessiontimeout = paymentRequest.sessiontimeout;
+        }
 
         // Offshore accounts don't use amountCur/symbolCur
         if (this.config.accountType !== 'offshore') {

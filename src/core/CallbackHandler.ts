@@ -104,6 +104,16 @@ export class CallbackHandler {
     };
   }
 
+  /**
+   * Extract params from the incoming request.
+   *
+   * @security `supportGetMethod` — enabling this option causes CMI callback
+   * parameters (including order ID, amount, and return codes) to arrive via
+   * the URL query string. Query strings are recorded in server access logs,
+   * browser history, and HTTP `Referer` headers sent to third-party resources.
+   * Only enable this option if your infrastructure cannot receive POST requests
+   * and you have taken steps to redact sensitive query parameters from logs.
+   */
   private extractParams(req: CallbackRequest): any {
     const method = (req.method || "POST").toUpperCase();
 
@@ -128,13 +138,24 @@ export class CallbackHandler {
     }
   }
 
+  /**
+   * Handle callback params directly (for frameworks that manage their own response).
+   *
+   * Consumer-provided `onSuccess` / `onFailure` callbacks are wrapped in a
+   * try-catch so that a throw inside them does not propagate to the caller and
+   * does not prevent the result from being returned.
+   */
   async handle(params: any): Promise<CallbackResult> {
     const result: CallbackResult = this.gateway.verifyCallback(params);
 
-    if (result.success) {
-      await Promise.resolve(this.options.onSuccess(result));
-    } else {
-      await Promise.resolve(this.options.onFailure(result));
+    try {
+      if (result.success) {
+        await Promise.resolve(this.options.onSuccess(result));
+      } else {
+        await Promise.resolve(this.options.onFailure(result));
+      }
+    } catch (callbackError) {
+      logger.error('User callback error in handle():', callbackError);
     }
 
     return result;

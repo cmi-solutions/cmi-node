@@ -42,7 +42,9 @@ export const OPTIONAL_PAYMENT_FIELDS = [
 export type OptionalPaymentField = typeof OPTIONAL_PAYMENT_FIELDS[number];
 
 /**
- * Standard payment fields (used for filtering custom fields)
+ * Standard payment fields (used for filtering custom fields).
+ * Every field handled explicitly by the builder must be listed here
+ * to prevent it from falling through to addCustomFields.
  */
 export const STANDARD_PAYMENT_FIELDS = [
     'amount',
@@ -60,6 +62,9 @@ export const STANDARD_PAYMENT_FIELDS = [
     'AutoRedirect',
     'amountCur',
     'symbolCur',
+    'sessiontimeout',
+    'redirectGet',
+    'CallbackResponse',
     ...OPTIONAL_PAYMENT_FIELDS,
 ] as const;
 

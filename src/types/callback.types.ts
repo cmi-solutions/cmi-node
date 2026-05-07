@@ -7,7 +7,8 @@ export interface CallbackResult {
     orderId: string | undefined;
     amount: number;
     currency: string;
-    transactionId: string;
+    /** Bank transaction ID. From TransId. Undefined when absent (e.g. on failure callbacks). */
+    transactionId?: string;
 
     // ── Always present (success + failure) ──────────────────────────────
     /** Bank/gateway return code. '00' = success. From ProcReturnCode. */
