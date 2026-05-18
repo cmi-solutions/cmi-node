@@ -8,19 +8,36 @@ on:
 
 jobs:
   # ─────────────────────────────────────────────────────────────
-  # JOB 1 — Validate branch name (PRs only)
+  # JOB 1 — Validate branch name
+  # Runs on BOTH push and pull_request.
+  # Long-lived protected branches bypass the pattern check.
   # Allowed prefixes: feature/, fix/, chore/, docs/, refactor/, test/, ci/
   # ─────────────────────────────────────────────────────────────
   branch-name:
     name: Validate Branch Name
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
 
     steps:
+      - name: Resolve branch name
+        id: resolve
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BRANCH="${{ github.head_ref }}"
+          else
+            BRANCH="${GITHUB_REF_NAME}"
+          fi
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "Resolved branch: $BRANCH"
+
       - name: Check branch naming convention
         run: |
-          BRANCH="${{ github.head_ref }}"
-          echo "Branch name: $BRANCH"
+          BRANCH="${{ steps.resolve.outputs.branch }}"
+
+          PROTECTED="^(main|develop|pre-prod)$"
+          if [[ "$BRANCH" =~ $PROTECTED ]]; then
+            echo "✓ Protected branch '$BRANCH' — skipping naming check."
+            exit 0
+          fi
 
           PATTERN="^(feature|fix|chore|docs|refactor|test|ci)\/[a-z0-9][a-z0-9\-\/]*$"
 
@@ -35,13 +52,13 @@ jobs:
           echo "✓ Branch name '$BRANCH' is valid."
 
   # ─────────────────────────────────────────────────────────────
-  # JOB 2 — Validate commit messages (PRs only, server-side)
+  # JOB 2 — Validate commit messages
+  # Runs on BOTH push and pull_request.
   # Enforces commitlint even if Husky is bypassed locally.
   # ─────────────────────────────────────────────────────────────
   commit-lint:
     name: Validate Commit Messages
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
 
     steps:
       - name: Checkout code (full history for commit range)
@@ -58,12 +75,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run commitlint on PR commits
+      - name: Run commitlint (pull_request)
+        if: github.event_name == 'pull_request'
         run: |
           npx commitlint \
             --from ${{ github.event.pull_request.base.sha }} \
             --to   ${{ github.event.pull_request.head.sha }} \
             --verbose
+
+      - name: Run commitlint (push — single or range of commits)
+        if: github.event_name == 'push'
+        run: |
+          BEFORE="${{ github.event.before }}"
+          HEAD="${{ github.sha }}"
+
+          if [[ "$BEFORE" == "0000000000000000000000000000000000000000" ]]; then
+            echo "First push to branch — linting HEAD commit only."
+            npx commitlint --from "${HEAD}^" --to "${HEAD}" --verbose
+          else
+            echo "Linting commits from ${BEFORE} to ${HEAD}."
+            npx commitlint --from "${BEFORE}" --to "${HEAD}" --verbose
+          fi
 
   # ─────────────────────────────────────────────────────────────
   # JOB 3 — Main CI: build, type-check, lint, test
