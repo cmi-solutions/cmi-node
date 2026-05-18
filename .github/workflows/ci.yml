@@ -2,16 +2,16 @@ name: CI
 
 on:
   push:
-    branches: [main, pre-prod, develop]
+    branches: [main, preprod, develop]
   pull_request:
-    branches: [main, pre-prod, develop]
+    branches: [main, preprod, develop]
 
 jobs:
   # ─────────────────────────────────────────────────────────────
   # JOB 1 — Validate branch name
   # Runs on BOTH push and pull_request.
   # Long-lived protected branches bypass the pattern check.
-  # Allowed prefixes: feature/, fix/, chore/, docs/, refactor/, test/, ci/
+  # Allowed prefixes: feat/, fix/, chore/, docs/, refactor/, test/, ci/
   # ─────────────────────────────────────────────────────────────
   branch-name:
     name: Validate Branch Name
@@ -33,19 +33,19 @@ jobs:
         run: |
           BRANCH="${{ steps.resolve.outputs.branch }}"
 
-          PROTECTED="^(main|develop|pre-prod)$"
+          PROTECTED="^(main|develop|preprod)$"
           if [[ "$BRANCH" =~ $PROTECTED ]]; then
             echo "✓ Protected branch '$BRANCH' — skipping naming check."
             exit 0
           fi
 
-          PATTERN="^(feature|fix|chore|docs|refactor|test|ci)\/[a-z0-9][a-z0-9\-\/]*$"
+          PATTERN="^(feat|fix|chore|docs|refactor|test|ci|release)/[a-z0-9][a-z0-9-]*$"
 
           if [[ ! "$BRANCH" =~ $PATTERN ]]; then
             echo "::error::Branch name '$BRANCH' does not follow naming convention."
             echo "::error::Expected pattern: <type>/<description>"
-            echo "::error::Allowed types: feature, fix, chore, docs, refactor, test, ci"
-            echo "::error::Example valid names: feature/add-payment-link, fix/hash-mismatch, chore/update-deps"
+            echo "::error::Allowed types: feat, fix, chore, docs, refactor, test, ci, release"
+            echo "::error::Example valid names: feat/add-payment-link, fix/hash-mismatch, chore/update-deps"
             exit 1
           fi
 
