@@ -1,11 +1,11 @@
 branch=$(git symbolic-ref --short HEAD)
-pattern='^(main|develop|preprod|(feature|fix|chore|docs|refactor|release|ci|test)\/[a-z0-9-]+)$'
+pattern='^(main|develop|preprod|(feat|fix|chore|docs|refactor|release|ci|test)/[a-z0-9-]+)$'
 
 if ! echo "$branch" | grep -qE "$pattern"; then
   echo "❌ Invalid branch name: '$branch'"
   echo "   Allowed branches: main, develop, preprod"
   echo "   Or format: <type>/<short-description>"
-  echo "   Types: feature, fix, chore, docs, refactor, release, ci, test"
-  echo "   Example: feature/add-refund, fix/callback-bug"
+  echo "   Types: feat, fix, chore, docs, refactor, release, ci, test"
+  echo "   Example: feat/add-refund, fix/callback-bug"
   exit 1
 fi
