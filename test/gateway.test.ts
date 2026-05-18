@@ -1037,7 +1037,7 @@ describe('Next.js Adapter', () => {
         assert.strictEqual(res._status, 200);
     });
 
-    it('Pages Router handler should return 500 on error', async () => {
+    it('Pages Router handler should still return 200 when onSuccess throws (error is logged)', async () => {
         const handler = createNextJsHandler(gateway, {
             onSuccess: () => { throw new Error('Boom'); }
         });
@@ -1049,7 +1049,8 @@ describe('Next.js Adapter', () => {
 
         await handler(req, res);
 
-        assert.strictEqual(res._status, 500);
+        // Payment was legitimately verified — user-callback errors are caught internally
+        assert.strictEqual(res._status, 200);
     });
 
     it('handleNextJsCallback should return a Response for App Router', async () => {
@@ -1135,7 +1136,7 @@ describe('Fastify Adapter', () => {
         assert.strictEqual(reply._code, 200);
     });
 
-    it('should return 500 on error', async () => {
+    it('should still return 200 when onSuccess throws (error is logged)', async () => {
         const handler = createFastifyHandler(gateway, {
             onSuccess: () => { throw new Error('DB error'); }
         });
@@ -1149,8 +1150,8 @@ describe('Fastify Adapter', () => {
 
         await handler({ body: cb }, reply);
 
-        assert.strictEqual(reply._code, 500);
-        assert.strictEqual(reply._body, 'FAILURE');
+        // Payment was legitimately verified — user-callback errors are caught internally
+        assert.strictEqual(reply._code, 200);
     });
 
     it('registerFastifyCallback should register a POST route', () => {
@@ -1265,7 +1266,8 @@ describe('Hono Adapter', () => {
 
         await handler(mockContext);
 
-        assert.strictEqual(responseStatus, 500);
+        // Payment was legitimately verified — user-callback errors are caught internally
+        assert.strictEqual(responseStatus, 200);
     });
 
     it('registerHonoCallback should register a POST route', () => {
@@ -1303,7 +1305,7 @@ describe('NestJS Adapter', () => {
         assert.strictEqual(res._status, 200);
     });
 
-    it('NestJSCallbackHandler should return 500 on error', async () => {
+    it('NestJSCallbackHandler should still return 200 when onSuccess throws (error is logged)', async () => {
         const handler = new NestJSCallbackHandler(gateway, {
             onSuccess: () => { throw new Error('DB crash'); }
         });
@@ -1314,7 +1316,8 @@ describe('NestJS Adapter', () => {
 
         await handler.handle(cb, res);
 
-        assert.strictEqual(res._status, 500);
+        // Payment was legitimately verified — user-callback errors are caught internally
+        assert.strictEqual(res._status, 200);
     });
 
     it('NestJSCallbackHandler.process should return CallbackResult', async () => {
@@ -1488,13 +1491,14 @@ describe('Validator — Extended Coverage', () => {
         );
     });
 
-    it('should throw for rnd with non-alphabetic chars', () => {
-        assert.throws(
+    it('should accept alphanumeric rnd (CMI spec allows digits)', () => {
+        // The CMI spec does not restrict rnd to alphabetic characters only.
+        // Alphanumeric values like 'abc123' must be accepted.
+        assert.doesNotThrow(
             () => PaymentValidator.validate({
                 ...validPaymentRequest,
                 rnd: 'abc123',
-            } as any),
-            /rnd.*alphabetic/
+            } as any)
         );
     });
 
