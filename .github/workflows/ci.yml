@@ -2,16 +2,16 @@ name: CI
 
 on:
   push:
-    branches: [main, pre-prod, develop]
+    branches: [main, preprod, develop]
   pull_request:
-    branches: [main, pre-prod, develop]
+    branches: [main, preprod, develop]
 
 jobs:
   # ─────────────────────────────────────────────────────────────
   # JOB 1 — Validate branch name
   # Runs on BOTH push and pull_request.
   # Long-lived protected branches bypass the pattern check.
-  # Allowed prefixes: feature/, fix/, chore/, docs/, refactor/, test/, ci/
+  # Allowed prefixes: feat/, fix/, chore/, docs/, refactor/, test/, ci/, release/
   # ─────────────────────────────────────────────────────────────
   branch-name:
     name: Validate Branch Name
@@ -33,19 +33,19 @@ jobs:
         run: |
           BRANCH="${{ steps.resolve.outputs.branch }}"
 
-          PROTECTED="^(main|develop|pre-prod)$"
+          PROTECTED="^(main|develop|preprod)$"
           if [[ "$BRANCH" =~ $PROTECTED ]]; then
             echo "✓ Protected branch '$BRANCH' — skipping naming check."
             exit 0
           fi
 
-          PATTERN="^(feature|fix|chore|docs|refactor|test|ci)\/[a-z0-9][a-z0-9\-\/]*$"
+          PATTERN="^(feat|fix|chore|docs|refactor|test|ci|release)/[a-z0-9][a-z0-9-]*$"
 
           if [[ ! "$BRANCH" =~ $PATTERN ]]; then
             echo "::error::Branch name '$BRANCH' does not follow naming convention."
             echo "::error::Expected pattern: <type>/<description>"
-            echo "::error::Allowed types: feature, fix, chore, docs, refactor, test, ci"
-            echo "::error::Example valid names: feature/add-payment-link, fix/hash-mismatch, chore/update-deps"
+            echo "::error::Allowed types: feat, fix, chore, docs, refactor, test, ci, release"
+            echo "::error::Example valid names: feat/add-payment-link, fix/hash-mismatch, chore/update-deps"
             exit 1
           fi
 
@@ -198,3 +198,58 @@ jobs:
           yarn add $GITHUB_WORKSPACE/cmi-node-*.tgz
           yarn node -e "const { CMIPaymentGateway } = require('cmi-node'); console.log('✅ Yarn Berry CJS import OK');"
           yarn node --input-type=module -e "import { CMIPaymentGateway } from 'cmi-node'; console.log('✅ Yarn Berry ESM import OK');"
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 5 — Enforce merge policy (pull_request only)
+  # develop  ← feat/fix/chore/docs/refactor/test/ci/release branches only
+  # preprod  ← develop only
+  # main     ← preprod only
+  # ─────────────────────────────────────────────────────────────
+  merge-policy:
+    name: Enforce Merge Policy
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Check merge direction
+        run: |
+          SOURCE="${{ github.head_ref }}"
+          TARGET="${{ github.base_ref }}"
+
+          echo "PR: '$SOURCE' → '$TARGET'"
+
+          # ── develop: only accepts feature branches ──────────────
+          if [[ "$TARGET" == "develop" ]]; then
+            ALLOWED="^(feat|fix|chore|docs|refactor|test|ci|release)/[a-z0-9][a-z0-9-]*$"
+            if [[ ! "$SOURCE" =~ $ALLOWED ]]; then
+              echo "::error::❌ '$SOURCE' cannot be merged into 'develop'."
+              echo "::error::Only feat/fix/chore/docs/refactor/test/ci/release branches are allowed."
+              exit 1
+            fi
+            echo "✓ '$SOURCE' → 'develop' is allowed."
+            exit 0
+          fi
+
+          # ── preprod: only accepts from develop ──────────────────
+          if [[ "$TARGET" == "preprod" ]]; then
+            if [[ "$SOURCE" != "develop" ]]; then
+              echo "::error::❌ '$SOURCE' cannot be merged into 'preprod'."
+              echo "::error::Only 'develop' can be merged into 'preprod'."
+              exit 1
+            fi
+            echo "✓ 'develop' → 'preprod' is allowed."
+            exit 0
+          fi
+
+          # ── main: only accepts from preprod ─────────────────────
+          if [[ "$TARGET" == "main" ]]; then
+            if [[ "$SOURCE" != "preprod" ]]; then
+              echo "::error::❌ '$SOURCE' cannot be merged into 'main'."
+              echo "::error::Only 'preprod' can be merged into 'main'."
+              exit 1
+            fi
+            echo "✓ 'preprod' → 'main' is allowed."
+            exit 0
+          fi
+
+          echo "✓ No merge policy restriction for target '$TARGET'."
