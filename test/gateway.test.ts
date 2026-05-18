@@ -88,9 +88,9 @@ function simulateCMICallback(
 function makeMockRes() {
     const res: Record<string, any> = { _status: 0, _body: '' };
     res.status = (code: number) => { res._status = code; return res; };
-    res.send   = (body: any)    => { res._body  = body;  return res; };
-    res.json   = (data: any)    => { res._body  = JSON.stringify(data); return res; };
-    res.end    = ()             => {};
+    res.send = (body: any) => { res._body = body; return res; };
+    res.json = (data: any) => { res._body = JSON.stringify(data); return res; };
+    res.end = () => { };
     return res;
 }
 
@@ -396,7 +396,7 @@ describe('SecretString', () => {
         const inspectSymbol = Symbol.for('nodejs.util.inspect.custom');
         // Access via type-safe cast to avoid implicit-any on symbol indexing
         const inspectFn = (s as unknown as Record<symbol, () => string>)[inspectSymbol];
-        const inspect   = inspectFn.call(s);
+        const inspect = inspectFn.call(s);
         assert.ok(inspect.includes('********'));
         assert.ok(!inspect.includes('super-secret'));
     });
@@ -456,7 +456,7 @@ describe('HashUtil', () => {
 
     it('should work with SecretString', () => {
         const params = { amount: '100.00' };
-        const plain  = HashUtil.generate(params, 'my-store-key');
+        const plain = HashUtil.generate(params, 'my-store-key');
         const secret = HashUtil.generate(params, new SecretString('my-store-key'));
         assert.strictEqual(plain, secret);
     });
@@ -491,20 +491,20 @@ describe('HashUtil', () => {
      *   "
      */
     it('deterministic hash anchor — any algorithm change will fail this test', async () => {
-        const params   = { amount: '100.00', oid: 'ANCHOR_ORDER' };
+        const params = { amount: '100.00', oid: 'ANCHOR_ORDER' };
         const storeKey = 'anchor-test-key';
-        const actual   = HashUtil.generate(params, storeKey);
+        const actual = HashUtil.generate(params, storeKey);
 
         // Recompute expected inline so we don't rely on a pre-stored constant
-        const crypto   = await import('crypto');
-        const sorted   = Object.keys(params).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-        let hashval    = '';
+        const crypto = await import('crypto');
+        const sorted = Object.keys(params).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+        let hashval = '';
         for (const k of sorted) {
             const v = String((params as any)[k]).trim().replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
             hashval += v + '|';
         }
-        hashval   += storeKey.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
-        const hex  = crypto.createHash('sha512').update(hashval, 'utf8').digest('hex');
+        hashval += storeKey.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+        const hex = crypto.createHash('sha512').update(hashval, 'utf8').digest('hex');
         const expected = Buffer.from(hex, 'hex').toString('base64');
 
         assert.strictEqual(actual, expected, 'Hash algorithm produced unexpected output — algorithm may have changed');
@@ -760,7 +760,7 @@ describe('PaymentValidator', () => {
 // ===========================================================================
 describe('CMIPaymentGateway - generatePaymentForm', () => {
     it('should generate HTML form with POST method', () => {
-        const gw   = new CMIPaymentGateway(validConfig);
+        const gw = new CMIPaymentGateway(validConfig);
         const params = gw.createPaymentParams(validPaymentRequest);
         const form = gw.generatePaymentForm(params);
         assert.ok(form.includes('<form'));
@@ -769,7 +769,7 @@ describe('CMIPaymentGateway - generatePaymentForm', () => {
     });
 
     it('should prevent XSS via HTML-escaping of custom fields', () => {
-        const gw   = new CMIPaymentGateway(validConfig);
+        const gw = new CMIPaymentGateway(validConfig);
         const params = gw.createPaymentParams({
             ...validPaymentRequest,
             customField: '<script>alert(1)</script>',
@@ -781,7 +781,7 @@ describe('CMIPaymentGateway - generatePaymentForm', () => {
     });
 
     it('should auto-submit on page load (script tag)', () => {
-        const gw   = new CMIPaymentGateway(validConfig);
+        const gw = new CMIPaymentGateway(validConfig);
         const params = gw.createPaymentParams(validPaymentRequest);
         const form = gw.generatePaymentForm(params);
         assert.ok(form.includes('<script'), 'Form should include script tag');
@@ -792,7 +792,7 @@ describe('CMIPaymentGateway - generatePaymentForm', () => {
     });
 
     it('should support CSP nonce in payment form', () => {
-        const gw   = new CMIPaymentGateway(validConfig);
+        const gw = new CMIPaymentGateway(validConfig);
         const params = gw.createPaymentParams(validPaymentRequest);
         const nonce = 'test-nonce-123';
         const form = gw.generatePaymentForm(params, { nonce });
@@ -814,8 +814,8 @@ describe('CallbackHandler', () => {
     });
 
     it('should process valid callback via handle()', async () => {
-        const h  = gateway.createCallbackHandler();
-        const p  = gateway.createPaymentParams(validPaymentRequest);
+        const h = gateway.createCallbackHandler();
+        const p = gateway.createPaymentParams(validPaymentRequest);
         const cb = simulateCMICallback(p, validConfig.storeKey);
         const result = await h.handle(cb);
         assert.strictEqual(result.success, true, result.message);
@@ -838,7 +838,7 @@ describe('CallbackHandler', () => {
 
     it('should return correct response string for auto mode', () => {
         const gw = new CMIPaymentGateway({ ...validConfig, confirmationMode: 'auto' });
-        const h  = gw.createCallbackHandler();
+        const h = gw.createCallbackHandler();
         const resp = h.getResponse({
             success: true,
             status: 'ACTION=POSTAUTH',
@@ -850,12 +850,12 @@ describe('CallbackHandler', () => {
     });
 
     it('middleware — should call onSuccess and send 200 for valid callback', async () => {
-        const p  = gateway.createPaymentParams(validPaymentRequest);
+        const p = gateway.createPaymentParams(validPaymentRequest);
         const cb = simulateCMICallback(p, validConfig.storeKey);
         let successCalled = false;
 
-        const h   = new CallbackHandler(gateway, { onSuccess: () => { successCalled = true; } });
-        const mw  = h.middleware();
+        const h = new CallbackHandler(gateway, { onSuccess: () => { successCalled = true; } });
+        const mw = h.middleware();
         const req = makeMockReq(cb);
         const res = makeMockRes();
 
@@ -867,8 +867,8 @@ describe('CallbackHandler', () => {
 
     it('middleware — should send FAILURE and call onFailure for bad hash', async () => {
         let failCalled = false;
-        const h   = new CallbackHandler(gateway, { onFailure: () => { failCalled = true; } });
-        const mw  = h.middleware();
+        const h = new CallbackHandler(gateway, { onFailure: () => { failCalled = true; } });
+        const mw = h.middleware();
         const req = makeMockReq({ HASH: 'wrong', amount: '100' });
         const res = makeMockRes();
 
@@ -879,11 +879,11 @@ describe('CallbackHandler', () => {
     });
 
     it('middleware — should call next() when autoRespond is false', async () => {
-        const p  = gateway.createPaymentParams(validPaymentRequest);
+        const p = gateway.createPaymentParams(validPaymentRequest);
         const cb = simulateCMICallback(p, validConfig.storeKey);
 
-        const h   = new CallbackHandler(gateway, { autoRespond: false });
-        const mw  = h.middleware();
+        const h = new CallbackHandler(gateway, { autoRespond: false });
+        const mw = h.middleware();
         const req = makeMockReq(cb);
         const res = makeMockRes();
         let nextCalled = false;
@@ -949,8 +949,8 @@ describe('Logger', () => {
 // ===========================================================================
 
 // --- Express Adapter ---
-import { createExpressMiddleware, createCallbackHandler } from '../src/middleware/express.middleware.js';
 
+import { createExpressMiddleware, createCallbackHandler } from '../src/middleware/express.middleware.js';
 describe('Express Adapter', () => {
     let gateway: CMIPaymentGateway;
     beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
@@ -1739,19 +1739,19 @@ describe('Audit Fixes & Regressions', () => {
 
     it('SecretString should provide runtime privacy via ES2022 #private fields', () => {
         const secret = new SecretString('super-secret-key-123');
-        
+
         // Assert the internal value is not exposed on the object surface
         const keys = Object.keys(secret);
         const ownProps = Object.getOwnPropertyNames(secret);
-        
+
         // Ensure the actual secret string is nowhere in the keys/properties
         assert.ok(!keys.includes('value'));
         assert.ok(!ownProps.includes('value'));
-        
+
         // Using "any" cast to try and access a loose property
         assert.strictEqual((secret as any).value, undefined);
         assert.strictEqual((secret as any)._value, undefined);
-        
+
         // The value should only be accessible through the getter method
         assert.strictEqual(secret.getValue(), 'super-secret-key-123');
     });
