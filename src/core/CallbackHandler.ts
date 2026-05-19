@@ -32,6 +32,10 @@ export class CallbackHandler {
       onFailure: options?.onFailure ?? (() => { }),
       supportGetMethod: options?.supportGetMethod ?? false,
     };
+
+    if (this.options.supportGetMethod) {
+      logger.warn("Security Warning: 'supportGetMethod' is enabled. CMI callback parameters (including sensitive payment data) will be accepted via URL query strings. Ensure your server access logs and CDNs do not expose these query strings.");
+    }
   }
 
   /** Express/Connect‑style middleware usable in any framework */

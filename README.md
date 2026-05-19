@@ -161,13 +161,21 @@ app.get('/pay', (req, res) => {
 app.post('/payment/callback', createExpressMiddleware(gateway, {
   onSuccess: async (result) => {
     console.log('✅ Payment verified:', result.orderData);
-    // IMPORTANT: check idempotency — prevent processing the same order twice
+    
+    // 1. IMPORTANT: Check idempotency (prevent replay attacks)
     const order = await db.orders.findOne({ id: result.orderData.orderId });
-    if (order?.status === 'paid') return;
+    if (order?.status === 'paid') return; // Already processed!
+
+    // 2. IMPORTANT: Verify the amount matches your database
+    if (order.amount !== result.orderData.amount) {
+      console.error('Amount mismatch detected!');
+      return; 
+    }
+
+    // 3. Fulfill the order
     await db.orders.update(result.orderData.orderId, {
       status: 'paid',
       transactionId: result.orderData.transactionId,
-      amount: result.orderData.amount,
     });
   },
   onFailure: (result) => {
