@@ -198,6 +198,11 @@ export class CMIPaymentGateway {
 
   /**
    * Create callback handler manually (if not using auto-setup)
+   * 
+   * @warning Do not use this method if you have already registered a callback 
+   * endpoint via the constructor options (`options.app`) or via another helper, 
+   * as registering multiple handlers on the same route may cause your `onSuccess` 
+   * callback to execute twice.
    */
   createCallbackHandler(
     options?: CMIPaymentGatewayOptions["callbackConfig"]

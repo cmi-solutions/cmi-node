@@ -8,6 +8,7 @@
 import { PaymentRequest } from '@types';
 import { PaymentValidator } from '@validators';
 import { HashUtil, SanitizationUtil, FormatterUtil, GeneratorUtil, SecretString } from '@utils';
+import { logger } from '@logger';
 import { normalizeLanguage, AccountTypeValue } from '@constants';
 import { OPTIONAL_PAYMENT_FIELDS, STANDARD_PAYMENT_FIELDS } from '@constants/fields';
 
@@ -189,7 +190,13 @@ export class PaymentBuilder {
             // Skip if: it's a standard field OR already mapped (even with different casing)
             if (!STANDARD_FIELDS_LOWER.has(lowerKey) && !existingKeys.has(lowerKey) && value !== undefined && value !== null) {
                 // Enforce a reasonable max length on custom field values (SEC-2).
-                params[key] = String(value).substring(0, 255);
+                const strValue = String(value);
+                if (strValue.length > 255) {
+                    logger.warn(`CMI Warning: Custom field '${key}' exceeded 255 characters and was truncated to prevent request rejection.`);
+                    params[key] = strValue.substring(0, 255);
+                } else {
+                    params[key] = strValue;
+                }
             }
         }
     }
