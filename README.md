@@ -867,45 +867,6 @@ Always implement rate limiting on your callback endpoint to prevent brute-force 
 
 ---
 
-## 🏦 Account Types
-
-The SDK supports two account types that affect currency and multi-currency behavior:
-
-| Account Type | Currency | `amountCur` / `symbolCur` | Description |
-|---|---|---|---|
-| `'inshore'` (default) | MAD only (`"504"` or `"MAD"`) | ✅ Allowed | Standard Moroccan merchant account. Use `amountCur`/`symbolCur` to display a foreign currency equivalent. |
-| `'offshore'` | Any supported currency | ❌ Not allowed | Offshore merchant account that processes in a foreign currency directly. |
-
-> ⚠️ **Important:** The `'offshore'` account type is **not enabled by default**. To use offshore processing, you must contact the CMI commercial department and request activation.
-
-```typescript
-// Inshore (default) — process in MAD, display in EUR
-const gateway = new CMIPaymentGateway({
-  // accountType: 'inshore' — this is the default, no need to set it
-  ...config,
-});
-
-gateway.createPaymentParams({
-  amount: 100,       // Amount in MAD
-  currency: '504',   // Always MAD for inshore
-  amountCur: 10,     // Display amount in foreign currency
-  symbolCur: '978',  // EUR
-  // ...
-});
-
-// Offshore — process directly in USD (requires CMI commercial approval)
-const offshoreGateway = new CMIPaymentGateway({
-  ...config,
-  accountType: 'offshore',
-});
-
-offshoreGateway.createPaymentParams({
-  amount: 50,
-  currency: 'USD',  // Any supported currency
-  // amountCur / symbolCur are NOT allowed for offshore
-  // ...
-});
-```
 
 ### Callback URL Behavior
 
@@ -935,21 +896,6 @@ The `callbackUrl` field is **optional** in the gateway configuration:
 ### "Amount must be greater than or equal to 1"
 
 The CMI gateway requires `amount >= 1`. For sub-unit pricing, multiply to reach the minimum.
-
-### "Inshore accounts only accept MAD"
-
-For **inshore** accounts (default), the `currency` field must be `"504"` (numeric) or `"MAD"`. For foreign currency display, use `amountCur` and `symbolCur`:
-
-```typescript
-gateway.createPaymentParams({
-  amount: 100,
-  currency: '504',   // Always MAD for inshore
-  amountCur: 10,     // Display amount in foreign currency
-  symbolCur: '840',  // USD
-});
-```
-
-For **offshore** accounts, you can use any supported currency directly:
 
 ```typescript
 const gateway = new CMIPaymentGateway({ ...config, accountType: 'offshore' });
