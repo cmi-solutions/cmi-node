@@ -1,6 +1,7 @@
 # cmi-node (Node.js Package)
 
 [![npm version](https://img.shields.io/npm/v/cmi-node.svg)](https://www.npmjs.com/package/cmi-node)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Framework-agnostic CMI Payment Gateway SDK with built-in security for Node.js.**
@@ -106,7 +107,6 @@ const gateway = new CMIPaymentGateway({
 | `gatewayUrl` | `string` | ✅ | CMI gateway URL (must use `http://` or `https://`) |
 | `storetype` | `string` | ✅ | Store type (`3d_pay_hosting`, `3d`, `pay_hosting`, etc.) |
 | `trantype` | `string` | ✅ | Transaction type (case-insensitive: `preauth`, `auth`, `postauth`, `void`, `credit`) |
-| `accountType` | `string` | ❌ | Account type: `'inshore'` (default) or `'offshore'`. Offshore requires prior CMI commercial approval. See [Account Types](#-account-types). |
 | `callbackUrl` | `string` | ❌ | Callback URL for payment notifications. If omitted, payment confirmation will **not** be triggered automatically — the merchant must confirm manually via the CMI Back Office. |
 | `confirmationMode` | `string` | ❌ | `'auto'` (ACTION=POSTAUTH) or `'manual'` (APPROVED). Default: `'manual'`. |
 
@@ -142,8 +142,8 @@ const gateway = new CMIPaymentGateway({
 app.get('/pay', (req, res) => {
   const params = gateway.createPaymentParams({
     amount: 150.00,
-    BillToName: 'Ahmed Bennani',
-    email: 'ahmed@example.com',
+    BillToName: 'Ishak Zail',
+    email: 'ishak@example.com',
     tel: '+212600000000',
     okUrl: 'https://yoursite.com/success',
     failUrl: 'https://yoursite.com/failure',
@@ -317,8 +317,8 @@ export class PaymentController {
   pay(@Query('amount') amount: string, @Res() res: Response) {
     const params = this.paymentService.gateway.createPaymentParams({
       amount: parseFloat(amount) || 100,
-      BillToName: 'Ahmed Bennani',
-      email: 'ahmed@example.com',
+      BillToName: 'Adil Essakhi',
+      email: 'adil@example.com',
       okUrl: 'https://yoursite.com/success',
       failUrl: 'https://yoursite.com/failure',
       shopUrl: 'https://yoursite.com',
@@ -457,7 +457,7 @@ const gateway = new CMIPaymentGateway({
 fastify.get('/pay', async (request, reply) => {
   const params = gateway.createPaymentParams({
     amount: 200,
-    BillToName: 'Youssef Alaoui',
+    BillToName: 'Ishak Zail',
     email: 'youssef@example.com',
     okUrl: 'https://yoursite.com/success',
     failUrl: 'https://yoursite.com/failure',
@@ -512,8 +512,8 @@ const gateway = new CMIPaymentGateway({
 app.get('/pay', (c) => {
   const params = gateway.createPaymentParams({
     amount: 300,
-    BillToName: 'Fatima Zahra',
-    email: 'fatima@example.com',
+    BillToName: 'Jhon doe',
+    email: 'Jhon@example.com',
     okUrl: 'https://yoursite.com/success',
     failUrl: 'https://yoursite.com/failure',
     shopUrl: 'https://yoursite.com',
@@ -576,7 +576,7 @@ Creates payment parameters for initiating a payment. Returns a `Record<string, a
 | `okUrl` | `string` | ✅ | — | Redirect URL on success (must use `http(s)://`) |
 | `failUrl` | `string` | ✅ | — | Redirect URL on failure (must use `http(s)://`) |
 | `shopUrl` | `string` | ✅ | — | Your shop URL (must use `http(s)://`) |
-| `currency` | `string` | ✅ | — | Currency code or numeric. Inshore: must be `"504"` or `"MAD"`. Offshore: any supported currency. |
+| `currency` | `string` | ✅ | — | Currency code or numeric. Must be `"504"` or `"MAD"`.|
 | `oid` | `string` | ❌ | 64 | Order ID (auto-generated if omitted) |
 | `rnd` | `string` | ❌ | 20 | Random value (auto-generated if omitted, must be alphabetic) |
 | `lang` | `string` | ❌ | — | Language code: `"fr"`, `"en"`, `"ar"`, etc. (default: `"fr"`) |
@@ -585,8 +585,8 @@ Creates payment parameters for initiating a payment. Returns a `Record<string, a
 | `AutoRedirect` | `boolean` | ❌ | — | Auto-redirect after payment (default: `false`) |
 | `hashAlgorithm` | `string` | ❌ | — | Must be `"ver3"` if provided |
 | `encoding` | `string` | ❌ | — | Must be `"UTF-8"` if provided (default: `"UTF-8"`) |
-| `amountCur` | `number` | ❌ | — | Display amount in foreign currency (requires `symbolCur`; inshore only) |
-| `symbolCur` | `string` | ❌ | — | Foreign currency code, e.g. `"840"` for USD (requires `amountCur`; inshore only) |
+| `amountCur` | `number` | ❌ | — | Display amount in foreign currency (requires `symbolCur`) |
+| `symbolCur` | `string` | ❌ | — | Foreign currency code, e.g. `"840"` for USD (requires `amountCur`) |
 | `sessiontimeout` | `number` | ❌ | — | CMI hosted page session timeout in seconds. Min: 30, Max: 2700, Default: 1800. |
 | `redirectGet` | `boolean` | ❌ | — | When `true`, CMI redirects the customer to `okUrl`/`failUrl` via GET instead of POST. |
 | `CallbackResponse` | `boolean` | ❌ | — | Enables or disables the server-to-server callback for this specific request. Default: `true`. |
@@ -867,45 +867,6 @@ Always implement rate limiting on your callback endpoint to prevent brute-force 
 
 ---
 
-## 🏦 Account Types
-
-The SDK supports two account types that affect currency and multi-currency behavior:
-
-| Account Type | Currency | `amountCur` / `symbolCur` | Description |
-|---|---|---|---|
-| `'inshore'` (default) | MAD only (`"504"` or `"MAD"`) | ✅ Allowed | Standard Moroccan merchant account. Use `amountCur`/`symbolCur` to display a foreign currency equivalent. |
-| `'offshore'` | Any supported currency | ❌ Not allowed | Offshore merchant account that processes in a foreign currency directly. |
-
-> ⚠️ **Important:** The `'offshore'` account type is **not enabled by default**. To use offshore processing, you must contact the CMI commercial department and request activation.
-
-```typescript
-// Inshore (default) — process in MAD, display in EUR
-const gateway = new CMIPaymentGateway({
-  // accountType: 'inshore' — this is the default, no need to set it
-  ...config,
-});
-
-gateway.createPaymentParams({
-  amount: 100,       // Amount in MAD
-  currency: '504',   // Always MAD for inshore
-  amountCur: 10,     // Display amount in foreign currency
-  symbolCur: '978',  // EUR
-  // ...
-});
-
-// Offshore — process directly in USD (requires CMI commercial approval)
-const offshoreGateway = new CMIPaymentGateway({
-  ...config,
-  accountType: 'offshore',
-});
-
-offshoreGateway.createPaymentParams({
-  amount: 50,
-  currency: 'USD',  // Any supported currency
-  // amountCur / symbolCur are NOT allowed for offshore
-  // ...
-});
-```
 
 ### Callback URL Behavior
 
@@ -935,21 +896,6 @@ The `callbackUrl` field is **optional** in the gateway configuration:
 ### "Amount must be greater than or equal to 1"
 
 The CMI gateway requires `amount >= 1`. For sub-unit pricing, multiply to reach the minimum.
-
-### "Inshore accounts only accept MAD"
-
-For **inshore** accounts (default), the `currency` field must be `"504"` (numeric) or `"MAD"`. For foreign currency display, use `amountCur` and `symbolCur`:
-
-```typescript
-gateway.createPaymentParams({
-  amount: 100,
-  currency: '504',   // Always MAD for inshore
-  amountCur: 10,     // Display amount in foreign currency
-  symbolCur: '840',  // USD
-});
-```
-
-For **offshore** accounts, you can use any supported currency directly:
 
 ```typescript
 const gateway = new CMIPaymentGateway({ ...config, accountType: 'offshore' });
