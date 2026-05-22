@@ -1,4 +1,4 @@
-# Contributing to cmi-node
+ # Contributing to cmi-node
 
 Thank you for considering contributing to `cmi-node`! This document outlines the rules, conventions, and workflow you **must** follow before submitting any contribution.
 
@@ -95,7 +95,7 @@ Or without scope:
 
 | Rule | Constraint |
 |---|---|
-| **Header max length** | 72 characters |
+| **Header max length** | 100 characters |
 | **Subject case** | Cannot be `sentence-case`, `start-case`, `pascal-case`, or `UPPER-CASE` |
 | **Type** | Must be one of the allowed types below |
 
@@ -153,13 +153,13 @@ Branch names are validated by the `pre-push` Git hook. Your branch **must** matc
 
 Format: `<type>/<short-description>`
 
-- **Type** must be one of: `feature`, `fix`, `chore`, `docs`, `refactor`, `release`, `ci`, `test`
+- **Type** must be one of: `feat`, `fix`, `chore`, `docs`, `refactor`, `release`, `ci`, `test`
 - **Description** must be lowercase alphanumeric with hyphens (`a-z`, `0-9`, `-`)
 
 ### ✅ Valid Branch Names
 
 ```
-feature/add-refund
+feat/add-refund
 fix/callback-bug
 chore/update-deps
 docs/contributing-guide
@@ -173,11 +173,10 @@ test/hash-roundtrip
 
 ```
 my-branch                    # Missing type prefix
-feature/AddRefund            # No uppercase letters allowed
-feature/add_refund           # No underscores (use hyphens)
-Feature/add-refund           # Type must be lowercase
+feature/AddRefund            # 'feature' is not an allowed type and no uppercase letters allowed
+feat/add_refund              # No underscores (use hyphens)
+Feat/add-refund              # Type must be lowercase
 bugfix/something             # 'bugfix' is not an allowed type
-feat/something               # Use 'feature' not 'feat' for branches
 ```
 
 > **Note:** The `pre-push` hook validates your branch name before pushing. Invalid branch names will be **rejected** with a descriptive error message.
@@ -223,7 +222,6 @@ These hooks are installed automatically when you run `npm install` (via the `pre
 
 - Write tests for all new features
 - Use Node.js built-in `node:test` runner
-- Maintain or improve coverage (target: ≥ 85% line coverage)
 - Include hash roundtrip tests for any changes to hash generation
 - Test both CJS and ESM import paths
 - Reference issue numbers where applicable
@@ -242,7 +240,7 @@ These hooks are installed automatically when you run `npm install` (via the `pre
 8. 🚀 **Submit your PR** against the `main` branch
 
 > [!IMPORTANT]
-> **Direct commits to the `main` branch are strictly prohibited.** All changes must be submitted via a Pull Request and pass all CI checks before merging. Direct pushes to `main` will be blocked by branch protection and CI guards.
+> **Direct commits to the `main`, `preprod` and `develop` branches are strictly prohibited.** All changes must be submitted via a Pull Request and pass all CI checks before merging. Direct pushes to these branches will be blocked by branch protection and CI guards.
 
 ### CI Checks (Must Pass)
 
@@ -269,3 +267,4 @@ Your PR will be validated against:
 ## License
 
 By contributing, you agree that your contributions will be licensed under the MIT License.
+ 
