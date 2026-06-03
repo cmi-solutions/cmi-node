@@ -140,7 +140,7 @@ const gateway = new CMIPaymentGateway({
 });
 
 // Initiate a payment — renders an auto-submitting HTML form
-app.get('/pay', (req, res) => {
+app.post('/pay', (req, res) => {
   const params = gateway.createPaymentParams({
     amount: 150.00,
     BillToName: 'Ishak Zail',
