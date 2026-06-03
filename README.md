@@ -2,6 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/cmi-node.svg)](https://www.npmjs.com/package/cmi-node)
 
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Framework-agnostic CMI Payment Gateway SDK with built-in security for Node.js.**
@@ -139,9 +140,11 @@ const gateway = new CMIPaymentGateway({
 });
 
 // Initiate a payment — renders an auto-submitting HTML form
-app.get('/pay', (req, res) => {
+app.post('/pay', (req, res) => {
   const params = gateway.createPaymentParams({
     amount: 150.00,
+    BillToName: 'Ishak Zail',
+    email: 'ishak@example.com',
     BillToName: 'Ishak Zail',
     email: 'ishak@example.com',
     tel: '+212600000000',
@@ -253,7 +256,7 @@ app.post('/payment/callback', async (req, res) => {
 
 ```typescript
 // ──────────────────────────────────────────────
-// payment.module.ts
+// /cmi/payment.module.ts
 // ──────────────────────────────────────────────
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
@@ -268,7 +271,7 @@ import { PaymentService } from './payment.service';
 export class PaymentModule {}
 
 // ──────────────────────────────────────────────
-// payment.service.ts
+// /cmi/payment.service.ts
 // ──────────────────────────────────────────────
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -303,20 +306,22 @@ export class PaymentService {
 }
 
 // ──────────────────────────────────────────────
-// payment.controller.ts
+// /cmi/payment.controller.ts
 // ──────────────────────────────────────────────
 import { Controller, Get, Post, Query, Body, Res } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { PaymentService } from './payment.service';
 
 @Controller('payment')
 export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
-  @Get('pay')
-  pay(@Query('amount') amount: string, @Res() res: Response) {
+  @Post('/pay')
+  pay(@Body('amount') amount: string, @Res() res: Response) {
     const params = this.paymentService.gateway.createPaymentParams({
       amount: parseFloat(amount) || 100,
+      BillToName: 'Adil Essakhi',
+      email: 'adil@example.com',
       BillToName: 'Adil Essakhi',
       email: 'adil@example.com',
       okUrl: 'https://yoursite.com/success',
@@ -345,7 +350,7 @@ import { createNestJSHandler } from 'cmi-node';
 
 const handleCallback = createNestJSHandler(gateway, {
   onSuccess: async (result) => {
-    await updateOrder(result.orderData?.orderId);
+    // await updateOrder(result.orderData?.orderId);
   },
 });
 
@@ -355,21 +360,23 @@ async callback(@Body() body: any, @Res() res: Response) {
 }
 ```
 
-#### NestJS — Custom Response via `process()`
 
-Use `process()` when you want to inspect the result before sending a response:
-
+#### NestJS — Add your newly created module to your app module
 ```typescript
-@Post('callback')
-async handleCallback(@Body() body: any): Promise<string> {
-  const result = await this.paymentService.callbackHandler.process(body);
+// app.module.ts
+import { Module } from '@nestjs/common';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { PaymentModule } from './cmi/payment.module';
+import { ConfigModule } from '@nestjs/config';
 
-  if (result.success) {
-    await this.sendNotification(result.orderData);
-  }
+@Module({
+  imports: [ConfigModule.forRoot(), PaymentModule],
+  controllers: [AppController],
+  providers: [AppService],
+})
+export class AppModule {}
 
-  return result.success ? result.status : 'FAILURE';
-}
 ```
 
 ---
@@ -377,8 +384,9 @@ async handleCallback(@Body() body: any): Promise<string> {
 ### 3. Next.js — Pages Router
 
 ```typescript
-// pages/api/payment/callback.ts
-import { CMIPaymentGateway, createNextJsHandler } from 'cmi-node';
+// lib/cmi-gateway-config.ts
+
+import { CMIPaymentGateway } from 'cmi-node';
 
 const gateway = new CMIPaymentGateway({
   storeKey: process.env.CMI_STORE_KEY!,
@@ -390,13 +398,52 @@ const gateway = new CMIPaymentGateway({
   confirmationMode: 'auto',
 });
 
+// pages/api/payment/pay.ts
+
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { gateway } from '../../../lib/cmi-gateway-config';
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse,
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+
+  try {
+    const params = gateway.createPaymentParams({
+      amount: req.body.amount || '300',
+      BillToName: req.body.BillToName || 'CMI user',
+      email: req.body.email || 'user@example.com',
+      tel: req.body.tel || '0606060606',
+      okUrl: 'https://yoursite.com/success',
+      failUrl: 'https://yoursite.com/failure',
+      shopUrl: 'https://yoursite.com',
+      currency: req.body.currency || 'MAD',
+      lang: req.body.lang || 'en',
+    });
+
+    const form = gateway.generatePaymentForm(params);
+
+    res.setHeader('Content-Type', 'text/html');
+    return res.status(200).send(form);
+  } catch (error) {
+    return res.status(500).json({
+      error: 'Payment processing failed',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+}
+
+// pages/api/payment/callback.ts
+
+import { createNextJsHandler } from 'cmi-node';
+import { gateway } from '../../../lib/cmi-gateway-config';
+
 export default createNextJsHandler(gateway, {
   onSuccess: async (result) => {
-    console.log('Payment successful:', result.orderData);
-    await prisma.order.update({
-      where: { id: result.orderData.orderId },
-      data: { status: 'PAID' },
-    });
+    // Update order ID
   },
   onFailure: async (result) => {
     console.error('Payment failed:', result.message);
@@ -407,9 +454,9 @@ export default createNextJsHandler(gateway, {
 ### 3. Next.js — App Router
 
 ```typescript
-// app/api/payment/callback/route.ts
-import { NextRequest } from 'next/server';
-import { CMIPaymentGateway, handleNextJsCallback } from 'cmi-node';
+// app/lib/cmi-gateway-config.ts
+
+import { CMIPaymentGateway } from 'cmi-node';
 
 const gateway = new CMIPaymentGateway({
   storeKey: process.env.CMI_STORE_KEY!,
@@ -421,10 +468,47 @@ const gateway = new CMIPaymentGateway({
   confirmationMode: 'auto',
 });
 
+// app/api/payment/pay/route.ts
+import { gateway } from '../../../lib/cmi-gateway-config';
+
+export async function POST(request: NextRequest) {
+  try {
+
+    const params = gateway.createPaymentParams({
+      amount: '300',
+      BillToName: 'CMI user',
+      email: 'user@example.com',
+      tel: '0606060606',
+      okUrl: "https://yoursite.com/success",
+      failUrl: "https://yoursite.com/failure",
+      shopUrl: "https://yoursite.com",
+      currency: 'MAD',
+      lang: 'en',
+    });
+    const form = gateway.generatePaymentForm(params);
+
+    return new NextResponse(form, {
+      status: 200,
+      headers: { "Content-Type": "text/html" },
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: "Payment processing failed",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+// app/api/payment/callback/route.ts
+import { gateway } from '../../../lib/cmi-gateway-config';
+
 export async function POST(request: NextRequest) {
   return handleNextJsCallback(gateway, request, {
     onSuccess: async (result) => {
-      await updateOrder(result.orderData.orderId, 'paid');
+      // Update order ID
     },
     onFailure: async (result) => {
       console.error('Payment failed:', result.message);
@@ -454,11 +538,11 @@ const gateway = new CMIPaymentGateway({
 });
 
 // Initiate payment
-fastify.get('/pay', async (request, reply) => {
+fastify.post('/cmi/pay', async (request, reply) => {
   const params = gateway.createPaymentParams({
     amount: 200,
     BillToName: 'Ishak Zail',
-    email: 'youssef@example.com',
+    email: 'ishak@example.com',
     okUrl: 'https://yoursite.com/success',
     failUrl: 'https://yoursite.com/failure',
     shopUrl: 'https://yoursite.com',
@@ -470,7 +554,7 @@ fastify.get('/pay', async (request, reply) => {
 // Option A — manual route registration
 fastify.post('/cmi/callback', createFastifyHandler(gateway, {
   onSuccess: async (result) => {
-    await db.orders.update(result.orderData?.orderId, { status: 'paid' });
+    // await db.orders.update(result.orderData?.orderId, { status: 'paid' });
   },
   onFailure: (result) => {
     console.error('Payment failed:', result.message);
@@ -481,11 +565,14 @@ fastify.post('/cmi/callback', createFastifyHandler(gateway, {
 registerFastifyCallback(fastify, gateway, {
   path: '/cmi/callback',
   onSuccess: async (result) => {
-    await updateOrder(result.orderData?.orderId);
+    // await updateOrder(result.orderData?.orderId);
   },
 });
 
-fastify.listen({ port: 3000 });
+fastify.listen({ port: 3000, host: '0.0.0.0' }, (err, address) => {
+  if (err) throw err;
+  console.log(`Server running at ${address}`);
+});
 ```
 
 ---
@@ -493,10 +580,12 @@ fastify.listen({ port: 3000 });
 ### 5. Hono
 
 ```typescript
-import { Hono } from 'hono';
+import { serve } from '@hono/node-server'
+import 'dotenv/config'
+import { Hono } from 'hono'
 import { CMIPaymentGateway, createHonoHandler, registerHonoCallback } from 'cmi-node';
 
-const app = new Hono();
+const app = new Hono()
 
 const gateway = new CMIPaymentGateway({
   storeKey: process.env.CMI_STORE_KEY!,
@@ -509,23 +598,34 @@ const gateway = new CMIPaymentGateway({
 });
 
 // Initiate payment
-app.get('/pay', (c) => {
-  const params = gateway.createPaymentParams({
-    amount: 300,
-    BillToName: 'Jhon doe',
-    email: 'Jhon@example.com',
-    okUrl: 'https://yoursite.com/success',
-    failUrl: 'https://yoursite.com/failure',
-    shopUrl: 'https://yoursite.com',
-    currency: '504',
-  });
-  return c.html(gateway.generatePaymentForm(params));
+app.post('/pay', (c) => {
+  try {
+    const params = gateway.createPaymentParams({
+      amount: 300,
+      BillToName: 'Jhon  doe',
+      email: 'Jhon@example.com',
+      okUrl: 'https://yoursite.com/success',
+      failUrl: 'https://yoursite.com/failure',
+      shopUrl: 'https://yoursite.com',
+      currency: '504',
+    });
+
+    const form = gateway.generatePaymentForm(params);
+    return c.html(form);
+  } catch (error) {
+
+    c.status(500);
+    return c.json({
+      error: 'Failed to create payment form',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
 });
 
 // Option A — manual route registration
 app.post('/cmi/callback', createHonoHandler(gateway, {
   onSuccess: async (result) => {
-    await db.orders.update(result.orderData?.orderId, { status: 'paid' });
+    // Update order status in your database, etc.
   },
 }));
 
@@ -533,11 +633,18 @@ app.post('/cmi/callback', createHonoHandler(gateway, {
 registerHonoCallback(app, gateway, {
   path: '/cmi/callback',
   onSuccess: async (result) => {
+    // Update order status in your database, etc.
     console.log('Payment successful:', result.orderData);
   },
 });
 
-export default app;
+serve({
+  fetch: app.fetch,
+  port: 3000
+}, (info) => {
+  console.log(`Server is running on http://localhost:${info.port}`)
+})
+
 ```
 
 ---
@@ -577,6 +684,7 @@ Creates payment parameters for initiating a payment. Returns a `Record<string, a
 | `failUrl` | `string` | ✅ | — | Redirect URL on failure (must use `http(s)://`) |
 | `shopUrl` | `string` | ✅ | — | Your shop URL (must use `http(s)://`) |
 | `currency` | `string` | ✅ | — | Currency code or numeric. Must be `"504"` or `"MAD"`.|
+| `currency` | `string` | ✅ | — | Currency code or numeric. Must be `"504"` or `"MAD"`.|
 | `oid` | `string` | ❌ | 64 | Order ID (auto-generated if omitted) |
 | `rnd` | `string` | ❌ | 20 | Random value (auto-generated if omitted, must be alphabetic) |
 | `lang` | `string` | ❌ | — | Language code: `"fr"`, `"en"`, `"ar"`, etc. (default: `"fr"`) |
@@ -585,6 +693,8 @@ Creates payment parameters for initiating a payment. Returns a `Record<string, a
 | `AutoRedirect` | `boolean` | ❌ | — | Auto-redirect after payment (default: `false`) |
 | `hashAlgorithm` | `string` | ❌ | — | Must be `"ver3"` if provided |
 | `encoding` | `string` | ❌ | — | Must be `"UTF-8"` if provided (default: `"UTF-8"`) |
+| `amountCur` | `number` | ❌ | — | Display amount in foreign currency (requires `symbolCur`) |
+| `symbolCur` | `string` | ❌ | — | Foreign currency code, e.g. `"840"` for USD (requires `amountCur`) |
 | `amountCur` | `number` | ❌ | — | Display amount in foreign currency (requires `symbolCur`) |
 | `symbolCur` | `string` | ❌ | — | Foreign currency code, e.g. `"840"` for USD (requires `amountCur`) |
 | `sessiontimeout` | `number` | ❌ | — | CMI hosted page session timeout in seconds. Min: 30, Max: 2700, Default: 1800. |
@@ -971,7 +1081,3 @@ Contributions are welcome! Please read the [CONTRIBUTING.md](./CONTRIBUTING.md) 
 - All commits, pushes, and PRs are validated automatically via Git hooks and CI.
 
 ---
-
-## 📄 License
-
-MIT © [Ishak Zail](mailto:ishak.zail.iz@gmail.com)
