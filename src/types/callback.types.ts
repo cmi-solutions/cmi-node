@@ -1,6 +1,15 @@
 export interface CallbackResult {
+  /** True only for an authentic, approved payment (ProcReturnCode "00"). */
   success: boolean;
-  status: "ACTION=POSTAUTH" | "APPROVED" | "FAILURE";
+  /**
+   * - `"ACTION=POSTAUTH"` / `"APPROVED"`: authentic, approved payment (depends on confirmationMode).
+   * - `"DECLINED"`: authentic callback for a failed payment attempt. CMI is answered
+   *   `"APPROVED"` (acknowledgement), as in CMI's reference callback.php.
+   * - `"FAILURE"`: missing or invalid HASH, a technical error, or an order rejected by `validateOrder`.
+   */
+  status: "ACTION=POSTAUTH" | "APPROVED" | "DECLINED" | "FAILURE";
+  /** True when the HASH matched, i.e. the data really comes from CMI. */
+  verified: boolean;
   message: string;
   orderData?: {
     // ── Core fields (always present) ────────────────────────────────────

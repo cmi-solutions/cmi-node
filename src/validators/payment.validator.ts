@@ -126,11 +126,6 @@ export class PaymentValidator extends Validator {
       throw new Error("BillToName cannot exceed 255 characters");
     }
 
-    if (this.hasSpecialCharacters(request.BillToName)) {
-      throw new Error(
-        "BillToName contains special characters or consecutive spaces which are not allowed"
-      );
-    }
 
     if (!request.currency || !isSupportedCurrency(request.currency)) {
       throw new Error(
@@ -299,11 +294,6 @@ export class PaymentValidator extends Validator {
         }
         if (value.length > field.maxLen) {
           throw new Error(`${field.label} cannot exceed ${field.maxLen} characters`);
-        }
-        if (this.hasSpecialCharacters(value)) {
-          throw new Error(
-            `${field.label} contains special characters or consecutive spaces which are not allowed`
-          );
         }
       }
     }

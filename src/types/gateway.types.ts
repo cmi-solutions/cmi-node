@@ -5,7 +5,7 @@
  * Moved here for better organization.
  */
 
-import { CallbackResult } from './callback.types';
+import type { CallbackHandlerOptions } from './callback-handler.types';
 
 /**
  * Payment authorization mode
@@ -48,39 +48,5 @@ export interface CMIPaymentGatewayOptions {
     /**
      * Callback handler configuration
      */
-    callbackConfig?: {
-        /**
-         * Called when payment is verified successfully
-         */
-        onSuccess?: (result: CallbackResult) => Promise<void> | void;
-
-        /**
-         * Called when payment verification fails
-         */
-        onFailure?: (result: CallbackResult) => Promise<void> | void;
-
-        /**
-         * Whether to automatically send response to CMI
-         * @default true
-         */
-        autoRespond?: boolean;
-
-        /**
-         * Custom success response message
-         * @default "ACTION=POSTAUTH" or "APPROVED" (based on confirmationMode)
-         */
-        successResponse?: string;
-
-        /**
-         * Custom failure response message
-         * @default "FAILURE"
-         */
-        failureResponse?: string;
-
-        /**
-         * Support both POST and GET methods
-         * @default false
-         */
-        supportGetMethod?: boolean;
-    };
+    callbackConfig?: CallbackHandlerOptions;
 }

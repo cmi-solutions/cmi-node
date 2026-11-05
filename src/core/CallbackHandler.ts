@@ -20,7 +20,8 @@ import { logger } from "@logger";
  */
 export class CallbackHandler {
   private gateway: CMIPaymentGateway;
-  private options: Required<CallbackHandlerOptions>;
+  private options: Required<Omit<CallbackHandlerOptions, 'validateOrder'>> &
+    Pick<CallbackHandlerOptions, 'validateOrder'>;
 
   constructor(gateway: CMIPaymentGateway, options?: CallbackHandlerOptions) {
     this.gateway = gateway;
@@ -28,6 +29,8 @@ export class CallbackHandler {
       autoRespond: options?.autoRespond ?? true,
       successResponse: options?.successResponse ?? "",
       failureResponse: options?.failureResponse ?? "FAILURE",
+      declinedResponse: options?.declinedResponse ?? "APPROVED",
+      validateOrder: options?.validateOrder,
       onSuccess: options?.onSuccess ?? (() => { }),
       onFailure: options?.onFailure ?? (() => { }),
       supportGetMethod: options?.supportGetMethod ?? false,
@@ -47,12 +50,13 @@ export class CallbackHandler {
     ): Promise<void> => {
       try {
         const params = this.extractParams(req);
-        const result: CallbackResult = this.gateway.verifyCallback(params);
+        const result: CallbackResult = await this.verifyAndValidate(params);
 
-        // IMPORTANT: Send the response to CMI FIRST, based solely on the
-        // verification result.  If we let consumer callbacks run first,
-        // a throw inside onSuccess would cause a 500 FAILURE response
-        // even though the payment was legitimately verified.
+        // IMPORTANT: Send the response to CMI FIRST, based on the verification
+        // result and `validateOrder` (which runs before any answer, so an order
+        // that doesn't match is never captured). If we let onSuccess run first,
+        // a throw inside it would cause a 500 FAILURE response even though the
+        // payment was legitimately verified.
         if (this.options.autoRespond) {
           // Send response to CMI inside a try-catch to prevent
           // double-send if res.send() throws (e.g. socket closed,
@@ -133,13 +137,40 @@ export class CallbackHandler {
   }
 
   private sendResponse(res: CallbackResponse, result: CallbackResult): void {
-    if (result.success) {
-      const response = this.options.successResponse || result.status;
-      res.status(200).send(response);
-    } else {
-      const response = this.options.failureResponse;
-      res.status(200).send(response);
+    const response = this.getResponse(result);
+    res.status(response.status).send(response.body);
+  }
+
+  /**
+   * Verify the callback, then let the merchant check the order (`validateOrder`)
+   * before anything is answered to CMI — as CMI's integration guide requires
+   * (the order exists and its amount matches). A rejected or failing check turns
+   * the result into a FAILURE, so CMI does not capture the payment.
+   */
+  private async verifyAndValidate(params: any): Promise<CallbackResult> {
+    const result: CallbackResult = this.gateway.verifyCallback(params);
+    if (!result.success || !this.options.validateOrder) {
+      return result;
     }
+
+    let accepted = false;
+    let reason = 'validateOrder returned false';
+    try {
+      accepted = (await Promise.resolve(this.options.validateOrder(result))) === true;
+    } catch (error) {
+      reason = `validateOrder threw: ${error instanceof Error ? error.message : String(error)}`;
+      logger.error('Order validation error:', error);
+    }
+
+    if (accepted) {
+      return result;
+    }
+    return {
+      ...result,
+      success: false,
+      status: 'FAILURE',
+      message: `Order validation failed (${reason})`,
+    };
   }
 
   /**
@@ -150,7 +181,7 @@ export class CallbackHandler {
    * does not prevent the result from being returned.
    */
   async handle(params: any): Promise<CallbackResult> {
-    const result: CallbackResult = this.gateway.verifyCallback(params);
+    const result: CallbackResult = await this.verifyAndValidate(params);
 
     try {
       if (result.success) {
@@ -165,12 +196,22 @@ export class CallbackHandler {
     return result;
   }
 
+  /**
+   * The answer CMI expects for this result (as in CMI's reference callback.php):
+   * - approved payment → "ACTION=POSTAUTH" or "APPROVED" (confirmation mode), or `successResponse`
+   * - authentic decline → "APPROVED" (acknowledgement), or `declinedResponse`
+   * - invalid hash, technical error or rejected order → "FAILURE", or `failureResponse`
+   */
   getResponse(result: CallbackResult): { status: number; body: string } {
     if (result.success) {
       return {
         status: 200,
         body: this.options.successResponse || result.status,
       };
+    }
+
+    if (result.status === 'DECLINED' && result.verified) {
+      return { status: 200, body: this.options.declinedResponse };
     }
 
     return {

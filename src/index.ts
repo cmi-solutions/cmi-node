@@ -36,7 +36,7 @@ export {
 // - HashUtil: SHA-512 hash generation (internal only)  
 // - timingSafeCompare, sha512Base64: Crypto utilities (internal only)
 // - ConfigValidator, PaymentValidator: Validation logic (internal only)
-// - BILLING_FIELDS, HASH_SANITIZE_FIELDS, etc.: Internal field definitions
+// - BILLING_FIELDS, PHP_CLEANED_BILLING_FIELDS, etc.: Internal field definitions
 // =============================================================================
 
 // Logger exports

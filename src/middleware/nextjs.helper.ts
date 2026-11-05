@@ -81,8 +81,42 @@ export function createNextJsHandler(
 }
 
 /**
+ * Read the callback parameters from a web-standard Request.
+ *
+ * A Request body can be read only once, so it is read a single time and parsed
+ * according to its content type. CMI posts `application/x-www-form-urlencoded`;
+ * JSON and multipart bodies are also accepted. When the body is empty, the URL
+ * query parameters are used.
+ */
+export async function readAppRouterParams(request: any): Promise<Record<string, any>> {
+    const contentType = String(request?.headers?.get?.('content-type') ?? '').toLowerCase();
+
+    if (contentType.includes('multipart/form-data') && typeof request.formData === 'function') {
+        const formData = await request.formData();
+        return Object.fromEntries(formData.entries());
+    }
+
+    const raw: string = typeof request?.text === 'function' ? await request.text() : '';
+    if (raw.trim() !== '') {
+        const looksLikeJson = contentType.includes('application/json') || /^\s*\{/.test(raw);
+        if (looksLikeJson) {
+            try {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object') return parsed;
+            } catch {
+                // Not JSON after all: parse it as a form body below.
+            }
+        }
+        // Like PHP's $_POST, a repeated field keeps its last value.
+        return Object.fromEntries(new URLSearchParams(raw));
+    }
+
+    return Object.fromEntries(request?.nextUrl?.searchParams ?? new URL(request?.url ?? 'http://localhost').searchParams);
+}
+
+/**
  * Helper for Next.js App Router (route.ts)
- * 
+ *
  * Returns a web-standard Response object compatible with Next.js App Router.
  * The return type is kept as `any` to avoid leaking internal type dependencies
  * to consumers — the actual returned value is always a `Response` instance.
@@ -117,21 +151,7 @@ export async function handleNextJsCallback(
     const handler = new CallbackHandler(gateway, options);
 
     try {
-        // Try to parse body (for App Router)
-        let params;
-        try {
-            params = await request.json();
-        } catch {
-            // Fallback to form data if JSON parsing fails
-            try {
-                const formData = await request.formData();
-                params = Object.fromEntries(formData.entries());
-            } catch {
-                // Final fallback to query params
-                params = Object.fromEntries(request.nextUrl?.searchParams || []);
-            }
-        }
-
+        const params = await readAppRouterParams(request);
         const result = await handler.handle(params);
         const response = handler.getResponse(result);
 

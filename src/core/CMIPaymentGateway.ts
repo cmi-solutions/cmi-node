@@ -129,11 +129,8 @@ export class CMIPaymentGateway {
   ): void {
     // Create handler
     this.callbackHandler = new CallbackHandler(this, {
-      onSuccess: userCallbackConfig?.onSuccess,
-      onFailure: userCallbackConfig?.onFailure,
+      ...userCallbackConfig,
       autoRespond: userCallbackConfig?.autoRespond ?? true,
-      successResponse: userCallbackConfig?.successResponse,
-      failureResponse: userCallbackConfig?.failureResponse,
       supportGetMethod: userCallbackConfig?.supportGetMethod ?? false,
     });
 
