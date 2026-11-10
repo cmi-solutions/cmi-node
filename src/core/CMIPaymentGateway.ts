@@ -188,7 +188,8 @@ export class CMIPaymentGateway {
         `CMI Payment Gateway: Failed to register callback at POST ${callbackPath}. ` +
         `Ensure you passed a valid Express app instance. Original error: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
+        { cause: error }
       );
     }
   }

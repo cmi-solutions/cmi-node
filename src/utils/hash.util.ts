@@ -56,7 +56,8 @@ export class HashUtil {
       return Buffer.from(calculatedHash, "hex").toString("base64");
     } catch (error) {
       throw new Error(
-        `Hash generation failed: ${error instanceof Error ? error.message : "Unknown error"}`
+        `Hash generation failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+        { cause: error }
       );
     }
   }
