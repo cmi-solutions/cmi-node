@@ -1,6 +1,7 @@
 import { CallbackHandler } from "@core/CallbackHandler";
 import { CMIPaymentGateway } from "@core/CMIPaymentGateway";
 import { CallbackHandlerOptions } from "@types";
+import { logger } from "@logger";
 
 
 /**
@@ -66,16 +67,27 @@ export function createNextJsHandler(
     const handler = new CallbackHandler(gateway, options);
 
     return async (req: any, res: any) => {
-        // Handle both Pages Router and potential body parsing
-        const params = req.body || req.query || {};
-
+        let sent: unknown;
         try {
-            const result = await handler.handle(params);
-            const response = handler.getResponse(result);
+            // The body is used for POST callbacks. The query string is used only
+            // for GET requests when supportGetMethod is enabled, so callback data
+            // does not end up in URLs (and access logs) by accident.
+            const method = String(req?.method ?? 'POST').toUpperCase();
+            const params = method === 'GET'
+                ? (handler.supportsGetMethod ? req.query ?? {} : {})
+                : req.body ?? {};
 
-            return res.status(response.status).send(response.body);
-        } catch {
-            return res.status(500).send('FAILURE');
+            const { result, response } = await handler.evaluate(params);
+
+            // Answer CMI first, then run onSuccess / onFailure.
+            sent = res.status(response.status).send(response.body);
+            await handler.notify(result);
+            return sent;
+        } catch (error) {
+            logger.error('Next.js callback handler error:', error);
+            if (sent !== undefined) return sent;
+            const answer = handler.errorResponse();
+            return res.status(answer.status).send(answer.body);
         }
     };
 }
@@ -85,10 +97,19 @@ export function createNextJsHandler(
  *
  * A Request body can be read only once, so it is read a single time and parsed
  * according to its content type. CMI posts `application/x-www-form-urlencoded`;
- * JSON and multipart bodies are also accepted. When the body is empty, the URL
- * query parameters are used.
+ * JSON and multipart bodies are also accepted. The URL query parameters are used
+ * only for a GET request, and only when `allowQuery` is true (`supportGetMethod`).
  */
-export async function readAppRouterParams(request: any): Promise<Record<string, any>> {
+export async function readAppRouterParams(
+    request: any,
+    options: { allowQuery?: boolean } = {}
+): Promise<Record<string, any>> {
+    const method = String(request?.method ?? 'POST').toUpperCase();
+    if (method === 'GET') {
+        if (!options.allowQuery) return {};
+        return Object.fromEntries(request?.nextUrl?.searchParams ?? new URL(request?.url ?? 'http://localhost').searchParams);
+    }
+
     const contentType = String(request?.headers?.get?.('content-type') ?? '').toLowerCase();
 
     if (contentType.includes('multipart/form-data') && typeof request.formData === 'function') {
@@ -111,7 +132,53 @@ export async function readAppRouterParams(request: any): Promise<Record<string, 
         return Object.fromEntries(new URLSearchParams(raw));
     }
 
-    return Object.fromEntries(request?.nextUrl?.searchParams ?? new URL(request?.url ?? 'http://localhost').searchParams);
+    return {};
+}
+
+/**
+ * Create a Next.js App Router handler (route.ts) once, and reuse it for every request.
+ *
+ * @example
+ * ```typescript
+ * // app/api/payment/callback/route.ts
+ * import { CMIPaymentGateway, createNextJsAppRouterHandler } from 'cmi-node';
+ *
+ * const gateway = new CMIPaymentGateway({ ... });
+ * export const POST = createNextJsAppRouterHandler(gateway, {
+ *   validateOrder: async (result) => isExpectedOrder(result.orderData),
+ *   onSuccess: async (result) => { await markPaid(result.orderData!.orderId); },
+ * });
+ * ```
+ */
+export function createNextJsAppRouterHandler(
+    gateway: CMIPaymentGateway,
+    options?: CallbackHandlerOptions
+): (request: any) => Promise<Response> {
+    const handler = new CallbackHandler(gateway, options);
+    return (request: any) => respondToAppRouterRequest(handler, request);
+}
+
+async function respondToAppRouterRequest(handler: CallbackHandler, request: any): Promise<Response> {
+    try {
+        const params = await readAppRouterParams(request, { allowQuery: handler.supportsGetMethod });
+        // A Response can only be returned once, so onSuccess / onFailure run
+        // before the answer is returned: keep them fast.
+        const result = await handler.handle(params);
+        const response = handler.getResponse(result);
+
+        // Return web-standard Response (App Router compatible)
+        return new Response(response.body, {
+            status: response.status,
+            headers: { 'Content-Type': 'text/plain' }
+        });
+    } catch (error) {
+        logger.error('Next.js App Router callback handler error:', error);
+        const answer = handler.errorResponse();
+        return new Response(answer.body, {
+            status: answer.status,
+            headers: { 'Content-Type': 'text/plain' }
+        });
+    }
 }
 
 /**
@@ -148,22 +215,6 @@ export async function handleNextJsCallback(
     request: any,
     options?: CallbackHandlerOptions
 ): Promise<any> {
-    const handler = new CallbackHandler(gateway, options);
-
-    try {
-        const params = await readAppRouterParams(request);
-        const result = await handler.handle(params);
-        const response = handler.getResponse(result);
-
-        // Return web-standard Response (App Router compatible)
-        return new Response(response.body, {
-            status: response.status,
-            headers: { 'Content-Type': 'text/plain' }
-        });
-    } catch {
-        return new Response('FAILURE', {
-            status: 500,
-            headers: { 'Content-Type': 'text/plain' }
-        });
-    }
+    // Builds a handler per call. Prefer createNextJsAppRouterHandler(), which builds it once.
+    return respondToAppRouterRequest(new CallbackHandler(gateway, options), request);
 }

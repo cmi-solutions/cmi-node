@@ -1,5 +1,5 @@
 // src/core/CallbackHandler.ts
-import { CMIPaymentGateway } from "./CMIPaymentGateway";
+import type { CMIPaymentGateway } from "./CMIPaymentGateway";
 import {
   CallbackHandlerOptions,
   CallbackRequest,
@@ -9,12 +9,18 @@ import {
 } from "@types";
 import { logger } from "@logger";
 
+/** Status and body to answer CMI with. */
+export interface CallbackAnswer {
+  status: number;
+  body: string;
+}
+
 /**
  * Framework‑agnostic callback handling.
- * 
+ *
  * **Security Note:** This handler verifies the SHA-512 hash to ensure data integrity,
  * but it does NOT provide built-in replay attack protection or rate limiting.
- * Consumers MUST implement their own idempotency logic (e.g., checking if the 
+ * Consumers MUST implement their own idempotency logic (e.g., checking if the
  * `orderId` has already been processed in their database) to prevent multiple
  * executions for the same payment.
  */
@@ -22,6 +28,7 @@ export class CallbackHandler {
   private gateway: CMIPaymentGateway;
   private options: Required<Omit<CallbackHandlerOptions, 'validateOrder'>> &
     Pick<CallbackHandlerOptions, 'validateOrder'>;
+  private warnedNoValidateOrder = false;
 
   constructor(gateway: CMIPaymentGateway, options?: CallbackHandlerOptions) {
     this.gateway = gateway;
@@ -41,6 +48,11 @@ export class CallbackHandler {
     }
   }
 
+  /** Whether callback parameters may be read from the URL query string of a GET request. */
+  get supportsGetMethod(): boolean {
+    return this.options.supportGetMethod;
+  }
+
   /** Express/Connect‑style middleware usable in any framework */
   middleware(): CallbackMiddleware {
     return async (
@@ -50,7 +62,7 @@ export class CallbackHandler {
     ): Promise<void> => {
       try {
         const params = this.extractParams(req);
-        const result: CallbackResult = await this.verifyAndValidate(params);
+        const { result, response } = await this.evaluate(params);
 
         // IMPORTANT: Send the response to CMI FIRST, based on the verification
         // result and `validateOrder` (which runs before any answer, so an order
@@ -62,7 +74,7 @@ export class CallbackHandler {
           // double-send if res.send() throws (e.g. socket closed,
           // headers already sent).
           try {
-            this.sendResponse(res as CallbackResponse, result);
+            (res as CallbackResponse).status(response.status).send(response.body);
           } catch (sendError) {
             logger.error('Failed to send response to CMI:', sendError);
             // Do NOT attempt a second res.send() — the socket/response
@@ -72,35 +84,27 @@ export class CallbackHandler {
 
           // Invoke consumer callbacks AFTER the response is committed.
           // Errors here are logged but do NOT change the response.
-          try {
-            if (result.success) {
-              await Promise.resolve(this.options.onSuccess(result));
-            } else {
-              await Promise.resolve(this.options.onFailure(result));
-            }
-          } catch (callbackError) {
-            logger.error('User callback error (response already sent):', callbackError);
-          }
-        } else if (next) {
+          await this.notify(result);
+        } else {
           (req as any).paymentResult = result;
-          next();
+          if (next) {
+            next();
+          } else {
+            logger.warn(
+              "CallbackHandler: autoRespond is false and no next() was given, so nothing answers CMI. " +
+              "Send the answer yourself (see getResponse()), or leave autoRespond enabled."
+            );
+          }
 
           // Invoke consumer callbacks AFTER next() for non-autoRespond mode.
-          try {
-            if (result.success) {
-              await Promise.resolve(this.options.onSuccess(result));
-            } else {
-              await Promise.resolve(this.options.onFailure(result));
-            }
-          } catch (callbackError) {
-            logger.error('User callback error:', callbackError);
-          }
+          await this.notify(result);
         }
       } catch (error) {
         logger.error('Callback handler error:', error);
         if (this.options.autoRespond) {
           try {
-            (res as CallbackResponse).status(500).send("FAILURE");
+            const answer = this.errorResponse();
+            (res as CallbackResponse).status(answer.status).send(answer.body);
           } catch (sendError) {
             // Response is in an unknown state — nothing more we can do.
             logger.error('Failed to send error response:', sendError);
@@ -136,11 +140,6 @@ export class CallbackHandler {
     return req.body || {};
   }
 
-  private sendResponse(res: CallbackResponse, result: CallbackResult): void {
-    const response = this.getResponse(result);
-    res.status(response.status).send(response.body);
-  }
-
   /**
    * Verify the callback, then let the merchant check the order (`validateOrder`)
    * before anything is answered to CMI — as CMI's integration guide requires
@@ -149,7 +148,19 @@ export class CallbackHandler {
    */
   private async verifyAndValidate(params: any): Promise<CallbackResult> {
     const result: CallbackResult = this.gateway.verifyCallback(params);
-    if (!result.success || !this.options.validateOrder) {
+    if (!result.success) {
+      return result;
+    }
+
+    if (!this.options.validateOrder) {
+      if (!this.warnedNoValidateOrder && this.gateway.getConfirmationMode() === 'auto') {
+        this.warnedNoValidateOrder = true;
+        logger.warn(
+          "CallbackHandler: confirmationMode is 'auto' but no validateOrder was given. " +
+          "Payments are captured without checking that the order exists, matches the amount " +
+          "and was not already paid. Pass validateOrder to check the order before CMI captures it."
+        );
+      }
       return result;
     }
 
@@ -174,15 +185,20 @@ export class CallbackHandler {
   }
 
   /**
-   * Handle callback params directly (for frameworks that manage their own response).
-   *
-   * Consumer-provided `onSuccess` / `onFailure` callbacks are wrapped in a
-   * try-catch so that a throw inside them does not propagate to the caller and
-   * does not prevent the result from being returned.
+   * Verify the callback and work out the answer for CMI, without running
+   * `onSuccess` / `onFailure`. Adapters send `response` first, then call
+   * {@link notify}, so a slow consumer callback cannot delay CMI's answer.
    */
-  async handle(params: any): Promise<CallbackResult> {
-    const result: CallbackResult = await this.verifyAndValidate(params);
+  async evaluate(params: any): Promise<{ result: CallbackResult; response: CallbackAnswer }> {
+    const result = await this.verifyAndValidate(params);
+    return { result, response: this.getResponse(result) };
+  }
 
+  /**
+   * Run `onSuccess` or `onFailure` for a result. Errors thrown by the consumer
+   * are logged and never propagate, so they cannot change the answer to CMI.
+   */
+  async notify(result: CallbackResult): Promise<void> {
     try {
       if (result.success) {
         await Promise.resolve(this.options.onSuccess(result));
@@ -190,9 +206,19 @@ export class CallbackHandler {
         await Promise.resolve(this.options.onFailure(result));
       }
     } catch (callbackError) {
-      logger.error('User callback error in handle():', callbackError);
+      logger.error('User callback error (CMI answer not affected):', callbackError);
     }
+  }
 
+  /**
+   * Handle callback params directly (for frameworks that manage their own response).
+   *
+   * `onSuccess` / `onFailure` run before this resolves. Consumer errors are
+   * caught and logged, so they do not prevent the result from being returned.
+   */
+  async handle(params: any): Promise<CallbackResult> {
+    const { result } = await this.evaluate(params);
+    await this.notify(result);
     return result;
   }
 
@@ -202,7 +228,7 @@ export class CallbackHandler {
    * - authentic decline → "APPROVED" (acknowledgement), or `declinedResponse`
    * - invalid hash, technical error or rejected order → "FAILURE", or `failureResponse`
    */
-  getResponse(result: CallbackResult): { status: number; body: string } {
+  getResponse(result: CallbackResult): CallbackAnswer {
     if (result.success) {
       return {
         status: 200,
@@ -218,5 +244,10 @@ export class CallbackHandler {
       status: 200,
       body: this.options.failureResponse,
     };
+  }
+
+  /** The answer sent when handling the callback threw unexpectedly. */
+  errorResponse(): CallbackAnswer {
+    return { status: 500, body: this.options.failureResponse };
   }
 }

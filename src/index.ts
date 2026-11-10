@@ -34,14 +34,14 @@ export {
 // - PaymentBuilder: Payment parameter building with hash (internal only)
 // - FormGenerator: Form generation (internal only)
 // - HashUtil: SHA-512 hash generation (internal only)  
-// - timingSafeCompare, sha512Base64: Crypto utilities (internal only)
+// - timingSafeCompare: Crypto utilities (internal only)
 // - ConfigValidator, PaymentValidator: Validation logic (internal only)
-// - BILLING_FIELDS, PHP_CLEANED_BILLING_FIELDS, etc.: Internal field definitions
+// - PHP_CLEANED_BILLING_FIELDS, etc.: Internal field definitions
 // =============================================================================
 
 // Logger exports
 export { logger, configureLogger, resetLogger } from './logger';
-export type { LogLevel, LoggerConfig } from './logger';
+export type { LogLevel, LoggerConfig, LogSink } from './logger';
 
 // ============================================
 // Framework-Specific Helpers
@@ -56,6 +56,7 @@ export {
 // Next.js (Pages Router & App Router)
 export {
   createNextJsHandler,
+  createNextJsAppRouterHandler,
   handleNextJsCallback
 } from './middleware';
 

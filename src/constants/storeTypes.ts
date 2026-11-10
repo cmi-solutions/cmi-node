@@ -16,13 +16,3 @@ export function isSupportedStoreType(type: string): type is StoreType {
   return SUPPORTED_STORE_TYPES.includes(type.toLowerCase() as StoreType);
 }
 
-/**
- * Normalize store type to the canonical format (lowercase)
- */
-export function normalizeStoreType(type: string): StoreType {
-  const normalized = type.toLowerCase() as StoreType;
-  if (!SUPPORTED_STORE_TYPES.includes(normalized)) {
-    throw new Error(`Unsupported store type: ${type}. Supported types: ${SUPPORTED_STORE_TYPES.join(', ')}`);
-  }
-  return normalized;
-}

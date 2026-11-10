@@ -36,13 +36,3 @@ export function timingSafeCompare(a: string, b: string): boolean {
     }
 }
 
-/**
- * Generate a SHA-512 hash and return as base64
- * 
- * @param data - String to hash
- * @returns Base64-encoded SHA-512 hash
- */
-export function sha512Base64(data: string): string {
-    const hash = crypto.createHash('sha512').update(data, 'utf8').digest('hex');
-    return Buffer.from(hash, 'hex').toString('base64');
-}

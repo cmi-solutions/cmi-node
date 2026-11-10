@@ -46,17 +46,28 @@ export function createFastifyHandler(
     const handler = new CallbackHandler(gateway, options);
 
     return async (request: any, reply: any) => {
+        let sent: unknown;
         try {
-            // Fastify automatically parses body
-            const params = request.body || {};
+            // Fastify parses the body (register @fastify/formbody for CMI's
+            // application/x-www-form-urlencoded posts). The query string is
+            // only used for GET requests when supportGetMethod is enabled.
+            const method = String(request?.method ?? 'POST').toUpperCase();
+            const params = method === 'GET'
+                ? (handler.supportsGetMethod ? request.query ?? {} : {})
+                : request.body ?? {};
 
-            const result = await handler.handle(params);
-            const response = handler.getResponse(result);
+            const { result, response } = await handler.evaluate(params);
 
-            // Fastify uses .code() instead of .status()
-            return reply.code(response.status).send(response.body);
-        } catch {
-            return reply.code(500).send('FAILURE');
+            // Answer CMI first (Fastify uses .code() instead of .status()),
+            // then run onSuccess / onFailure.
+            sent = reply.code(response.status).send(response.body);
+            await handler.notify(result);
+            return sent;
+        } catch (error) {
+            logger.error('Fastify callback handler error:', error);
+            if (sent !== undefined) return sent;
+            const answer = handler.errorResponse();
+            return reply.code(answer.status).send(answer.body);
         }
     };
 }

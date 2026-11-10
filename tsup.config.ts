@@ -6,8 +6,8 @@ export default defineConfig({
         index: 'src/index.ts',
         // Per-framework subpath entries — consumers can import only what they need,
         // e.g.  import { createExpressMiddleware } from 'cmi-node/express'
-        // This also prevents edge-runtime failures: Hono/Cloudflare Workers
-        // won't evaluate Node.js-only modules at import time.
+        // Note: the core (CMIPaymentGateway) uses Node.js 'crypto' and Buffer, so edge
+        // runtimes need Node.js compatibility (e.g. Cloudflare Workers: nodejs_compat).
         'adapters/express':  'src/middleware/express.middleware.ts',
         'adapters/nextjs':   'src/middleware/nextjs.helper.ts',
         'adapters/fastify':  'src/middleware/fastify.helper.ts',

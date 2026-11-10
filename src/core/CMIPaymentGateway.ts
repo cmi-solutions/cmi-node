@@ -249,6 +249,18 @@ export class CMIPaymentGateway {
   }
 
   /**
+   * Generate only the escaped hidden `<input>` elements, for a custom form
+   * (for example when a strict Content-Security-Policy forbids the inline
+   * script of {@link generatePaymentForm}).
+   *
+   * @param params Payment parameters from {@link createPaymentParams}
+   * @returns One `<input type="hidden">` string per parameter
+   */
+  generatePaymentInputs(params: Record<string, any>): string[] {
+    return this.formGenerator.generateInputs(params);
+  }
+
+  /**
    * Verify callback from CMI
    *
    * Validates the hash (HASH #2 - Incoming) and returns payment status

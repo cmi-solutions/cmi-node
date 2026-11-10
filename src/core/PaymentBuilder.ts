@@ -170,8 +170,9 @@ export class PaymentBuilder {
             const value = SanitizationUtil.removeAccents(String(raw));
             if (value === '' && String(raw).trim() !== '') {
                 if (field === 'BillToName') {
+                    // The raw value is not echoed: error messages often end up in logs.
                     throw new Error(
-                        `BillToName "${String(raw)}" has no character CMI accepts. ` +
+                        `BillToName has no character CMI accepts. ` +
                         `Use Latin letters, digits, spaces, "-" or "_" (accents are removed automatically).`
                     );
                 }
@@ -229,6 +230,12 @@ export class PaymentBuilder {
 
         for (const [key, value] of Object.entries(paymentRequest)) {
             const lowerKey = key.toLowerCase();
+            // The hash is always computed by the SDK. A caller-supplied "hash" (any
+            // casing) would be posted next to the real one, so it is dropped.
+            if (lowerKey === 'hash') {
+                logger.warn(`CMI Warning: Custom field '${key}' was ignored; the hash is computed by the SDK.`);
+                continue;
+            }
             // Skip if: it's a standard field OR already mapped (even with different casing)
             if (!STANDARD_FIELDS_LOWER.has(lowerKey) && !existingKeys.has(lowerKey) && value !== undefined && value !== null) {
                 // Enforce a reasonable max length on custom field values (SEC-2).
