@@ -148,7 +148,7 @@ jobs:
         run: npm test
 
       - name: Coverage report
-        run: npx c8 --check-coverage --lines 85 npx tsx --test test/gateway.test.ts
+        run: npm run test:coverage
 
       - name: Verify package contents
         run: npm pack --dry-run 2>&1
