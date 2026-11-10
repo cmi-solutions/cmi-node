@@ -113,12 +113,12 @@
   },
   "homepage": "https://github.com/integrationcmi/cmi#readme",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.12.0"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.5.3",
     "@commitlint/config-conventional": "^20.5.3",
-    "@types/node": "^20.19.24",
+    "@types/node": "^22.20.5",
     "@typescript-eslint/eslint-plugin": "^8.59.2",
     "@typescript-eslint/parser": "^8.59.2",
     "c8": "^9.1.0",
