@@ -21,7 +21,7 @@ const config = {
     storeKey: 'TEST1234',
     clientId: '600200127',
     gatewayUrl: 'https://testpayment.cmi.co.ma/fim/est3Dgate',
-    storetype: '3d_pay_hosting',
+    storetype: '3d_pay_hosting' as const,
     trantype: 'PreAuth',
     callbackUrl: 'https://shop.example.ma/callback',
 };

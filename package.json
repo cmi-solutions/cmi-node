@@ -82,7 +82,7 @@
     "test:coverage": "c8 tsx --test test/**/*.test.ts",
     "lint": "eslint \"src/**/*.ts\"",
     "format": "prettier --write \"src/**/*.ts\"",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsc --noEmit && tsc -p tsconfig.test.json",
     "build": "tsup",
     "dev": "tsup --watch",
     "prepare": "husky"
@@ -125,9 +125,9 @@
     "eslint": "^8.56.0",
     "husky": "^9.1.7",
     "prettier": "^3.2.0",
-    "tsup": "^8.5.1",
+    "tsup": "^9.0.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.4.5"
+    "typescript": "~6.0.3"
   },
   "publishConfig": {
     "access": "public",

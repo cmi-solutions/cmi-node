@@ -841,6 +841,7 @@ describe('CallbackHandler', () => {
         const resp = h.getResponse({
             success: true,
             status: 'ACTION=POSTAUTH',
+            verified: true,
             message: 'ok',
             orderData: { orderId: 'T', amount: 100, currency: '504', transactionId: 'TX' },
         });
@@ -1233,6 +1234,7 @@ describe('Hono Adapter', () => {
 
         assert.strictEqual(successCalled, true);
         assert.strictEqual(responseStatus, 200);
+        assert.strictEqual(responseBody, 'APPROVED');
     });
 
     it('should fallback to parseBody when json() fails', async () => {
@@ -1351,6 +1353,7 @@ describe('NestJS Adapter', () => {
         const result = {
             success: true as const,
             status: 'APPROVED' as const,
+            verified: true,
             message: 'ok',
             orderData: { orderId: 'T', amount: 100, currency: '504', transactionId: 'TX' },
         };
@@ -1744,8 +1747,6 @@ describe('PaymentBuilder — description and custom fields', () => {
 // 20. Audit Fixes & Regressions
 // ===========================================================================
 describe('Audit Fixes & Regressions', () => {
-    let gateway: CMIPaymentGateway;
-    beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
 
     it('SecretString should provide runtime privacy via ES2022 #private fields', () => {
         const secret = new SecretString('super-secret-key-123');
