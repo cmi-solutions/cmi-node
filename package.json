@@ -106,12 +106,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/integrationcmi/cmi.git"
+    "url": "git+https://github.com/cmi-solutions/cmi-node.git"
   },
   "bugs": {
-    "url": "https://github.com/integrationcmi/cmi/issues"
+    "url": "https://github.com/cmi-solutions/cmi-node/issues"
   },
-  "homepage": "https://github.com/integrationcmi/cmi#readme",
+  "homepage": "https://github.com/cmi-solutions/cmi-node#readme",
   "engines": {
     "node": ">=22.12.0"
   },
