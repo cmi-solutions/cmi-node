@@ -11,8 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires Node.js 22.12 or newer (Node 18 and 20 are end of life).
 - `gatewayUrl` and `callbackUrl` must use `https://`; plain `http://` is accepted only for
   `localhost`, `*.localhost`, `127.0.0.1` and `[::1]`.
-- Amounts with more than 2 decimal places now throw instead of being rounded
-  (`1.005` used to be sent as `"1.00"`). String amounts are formatted without floats.
 - `clientId` must contain digits only.
 - The logger defaults to `warn` outside production (it used to print `debug` and `info`).
 - The Next.js (Pages and App Router) and Hono adapters no longer read callback parameters
@@ -32,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SECURITY.md` and Dependabot configuration.
 
 ### Fixed
+- Amounts with more than 2 decimals are rounded half-up to the cent on their decimal
+  digits, like CMI's gateway (`125.6578` → `125.66`, `125.3333` → `125.33`). The old
+  `Number.toFixed(2)` rounding was wrong for some values (`1.005` → `"1.00"`, now `"1.01"`).
+  The rounded value is the one posted to CMI and hashed.
 - Fastify, Next.js Pages and NestJS adapters answer CMI before running `onSuccess` /
   `onFailure`, like the Express middleware, so slow callbacks cannot delay CMI's answer.
 - A custom `HASH` field is ignored instead of being posted next to the SDK's hash.

@@ -54,7 +54,7 @@ function mockRes(order?: string[]) {
     return res;
 }
 
-describe('Amounts are never rounded silently (H1)', () => {
+describe('Amounts are rounded half-up to the cent, without float errors (H1)', () => {
     it('keeps exact string amounts', () => {
         assert.equal(FormatterUtil.formatAmount('220'), '220.00');
         assert.equal(FormatterUtil.formatAmount('0220.5'), '220.50');
@@ -62,32 +62,50 @@ describe('Amounts are never rounded silently (H1)', () => {
         assert.equal(FormatterUtil.formatAmount(' 10.25 '), '10.25');
     });
 
-    it('accepts float noise on numbers but formats exact cents', () => {
-        assert.equal(FormatterUtil.formatAmount(19.99 * 3), '59.97');
-        assert.equal(FormatterUtil.formatAmount(0.1 + 0.2), '0.30');
-        assert.equal(FormatterUtil.formatAmount(100), '100.00');
-    });
-
-    for (const bad of [1.005, 10.235, '220.555', '1.001']) {
-        it(`rejects ${JSON.stringify(bad)} (more than 2 decimals)`, () => {
-            assert.throws(() => FormatterUtil.formatAmount(bad), /at most 2 decimal places/);
+    const rounding: Array<[number | string, string]> = [
+        ['125.6578', '125.66'], // CMI log: "Amount 125.6578 updated to 125.66"
+        ['125.3333', '125.33'],
+        [125.6578, '125.66'],
+        [125.3333, '125.33'],
+        [1.005, '1.01'],       // Number.toFixed(2) gives "1.00"
+        ['1.005', '1.01'],
+        [10.235, '10.24'],
+        ['220.555', '220.56'],
+        ['1.001', '1.00'],
+        ['9.995', '10.00'],    // carries into the integer part
+        ['99.999', '100.00'],
+        ['0.004', '0.00'],
+        [19.99 * 3, '59.97'],  // float noise: 59.97000000000001
+        [0.1 + 0.2, '0.30'],   // 0.30000000000000004
+        [100, '100.00'],
+        ['123456789012345678.995', '123456789012345679.00'], // beyond Number precision
+    ];
+    for (const [input, expected] of rounding) {
+        it(`formats ${JSON.stringify(input)} as ${expected}`, () => {
+            assert.equal(FormatterUtil.formatAmount(input), expected);
         });
     }
 
-    for (const bad of ['1e3', '12,50', '220.', '', '-']) {
+    for (const bad of ['1e3', '12,50', '220.', '', '-', 'abc']) {
         it(`rejects the string ${JSON.stringify(bad)}`, () => {
             assert.throws(() => FormatterUtil.formatAmount(bad), /Invalid amount/);
         });
     }
 
-    it('rejects 1e21, which has no exact decimal form here', () => {
+    it('rejects 1e21, which String() writes in exponent form', () => {
         assert.throws(() => FormatterUtil.formatAmount(1e21), /Invalid amount/);
     });
 
-    it('createPaymentParams refuses an amount it would have to round', () => {
-        const gw = new CMIPaymentGateway(validConfig);
-        assert.throws(() => gw.createPaymentParams({ ...validPaymentRequest, amount: 1.005 }), /2 decimal places/);
-    });
+    for (const input of ['125.6578', 125.3333]) {
+        it(`createPaymentParams posts and hashes the rounded amount for ${JSON.stringify(input)}`, () => {
+            const gw = new CMIPaymentGateway(validConfig);
+            const params = gw.createPaymentParams({ ...validPaymentRequest, amount: input });
+            const expected = FormatterUtil.formatAmount(input);
+            assert.equal(params.amount, expected);
+            const { hash, ...rest } = params;
+            assert.equal(hash, HashUtil.generate(rest, validConfig.storeKey));
+        });
+    }
 });
 
 describe('Callbacks are not read from the query string unless supportGetMethod (H2, H3)', () => {
