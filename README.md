@@ -148,7 +148,8 @@ import { CMIPaymentGateway, createExpressMiddleware } from 'cmi-node';
 
 const app = express();
 
-// ⚠️ IMPORTANT: body parser MUST be registered before the callback route
+// ⚠️ IMPORTANT: CMI posts the callback as application/x-www-form-urlencoded,
+// so this parser MUST be registered before the callback route
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -168,8 +169,6 @@ app.post('/pay', (req, res) => {
     amount: 150.00,
     BillToName: 'Ishak Zail',
     email: 'ishak@example.com',
-    BillToName: 'Ishak Zail',
-    email: 'ishak@example.com',
     tel: '+212600000000',
     okUrl: 'https://yoursite.com/success',
     failUrl: 'https://yoursite.com/failure',
@@ -185,23 +184,21 @@ app.post('/pay', (req, res) => {
 
 // Handle CMI callback — SDK verifies hash & sends response automatically
 app.post('/payment/callback', createExpressMiddleware(gateway, {
+  // ⚠️ IMPORTANT: runs BEFORE CMI is answered. Return false to answer FAILURE,
+  // so CMI does not capture the payment. This is your amount check and your
+  // replay protection: onSuccess runs only after CMI has been answered.
+  validateOrder: async (result) => {
+    const order = await db.orders.findOne({ id: result.orderData!.orderId });
+    return !!order
+      && order.status !== 'paid'                       // not already processed (replay)
+      && order.amount === result.orderData!.amount;    // the amount you charged
+  },
+  // Runs after CMI has been answered: record the payment
   onSuccess: async (result) => {
-    console.log('✅ Payment verified:', result.orderData);
-    
-    // 1. IMPORTANT: Check idempotency (prevent replay attacks)
-    const order = await db.orders.findOne({ id: result.orderData.orderId });
-    if (order?.status === 'paid') return; // Already processed!
-
-    // 2. IMPORTANT: Verify the amount matches your database
-    if (order.amount !== result.orderData.amount) {
-      console.error('Amount mismatch detected!');
-      return; 
-    }
-
-    // 3. Fulfill the order
-    await db.orders.update(result.orderData.orderId, {
+    console.log('✅ Payment verified for order', result.orderData!.orderId);
+    await db.orders.update(result.orderData!.orderId, {
       status: 'paid',
-      transactionId: result.orderData.transactionId,
+      transactionId: result.orderData!.transactionId,
     });
   },
   onFailure: (result) => {
@@ -237,8 +234,12 @@ const gateway = new CMIPaymentGateway(
     app,                                      // Express app instance
     callbackPath: '/payment/callback',        // Default: '/api/payment/callback'
     callbackConfig: {
+      validateOrder: async (result) => {
+        const order = await db.orders.findOne({ id: result.orderData!.orderId });
+        return !!order && order.status !== 'paid' && order.amount === result.orderData!.amount;
+      },
       onSuccess: async (result) => {
-        await db.orders.update(result.orderData.orderId, { status: 'paid' });
+        await db.orders.update(result.orderData!.orderId, { status: 'paid' });
       },
       onFailure: (result) => {
         console.error('Payment failed:', result.message);
@@ -255,21 +256,26 @@ Use `createCallbackHandler` when you need full control over the response:
 ```typescript
 import { createCallbackHandler } from 'cmi-node';
 
-app.post('/payment/callback', async (req, res) => {
-  const handler = createCallbackHandler(gateway, {
-    autoRespond: false, // We'll handle the response manually
-    onSuccess: async (result) => {
-      await updateOrder(result.orderData.orderId, 'paid');
-    },
-  });
+// Build the handler once, outside the route
+const handler = createCallbackHandler(gateway, {
+  autoRespond: false, // We'll handle the response manually
+  validateOrder: async (result) => {
+    const order = await db.orders.findOne({ id: result.orderData!.orderId });
+    return !!order && order.status !== 'paid' && order.amount === result.orderData!.amount;
+  },
+  onSuccess: async (result) => {
+    await updateOrder(result.orderData!.orderId, 'paid');
+  },
+});
 
+app.post('/payment/callback', async (req, res) => {
   const result = await handler.handle(req.body);
 
-  if (result.success) {
-    res.status(200).send('ACTION=POSTAUTH');
-  } else {
-    res.status(200).send('FAILURE');
-  }
+  // getResponse() gives the answer CMI expects: ACTION=POSTAUTH or APPROVED for an
+  // approved payment (depending on confirmationMode), APPROVED for an authentic
+  // declined payment, and FAILURE for a forged or refused callback.
+  const answer = handler.getResponse(result);
+  res.status(answer.status).type('text/plain').send(answer.body);
 });
 ```
 
@@ -317,8 +323,14 @@ export class PaymentService {
     });
 
     this.callbackHandler = new NestJSCallbackHandler(this.gateway, {
+      // Runs BEFORE CMI is answered: return false to refuse the payment (FAILURE).
+      // Check the order exists, is not already paid (replay) and the amount matches.
+      validateOrder: async (result) => {
+        const order = await db.orders.findOne({ id: result.orderData!.orderId });
+        return !!order && order.status !== 'paid' && order.amount === result.orderData!.amount;
+      },
       onSuccess: async (result) => {
-        console.log('✅ Payment verified:', result.orderData);
+        console.log('✅ Payment verified for order', result.orderData?.orderId);
         // await this.ordersService.markAsPaid(result.orderData?.orderId);
       },
       onFailure: async (result) => {
@@ -343,8 +355,6 @@ export class PaymentController {
   pay(@Body('amount') amount: string, @Res() res: Response) {
     const params = this.paymentService.gateway.createPaymentParams({
       amount: parseFloat(amount) || 100,
-      BillToName: 'Adil Essakhi',
-      email: 'adil@example.com',
       BillToName: 'Adil Essakhi',
       email: 'adil@example.com',
       okUrl: 'https://yoursite.com/success',
@@ -372,6 +382,11 @@ export class PaymentController {
 import { createNestJSHandler } from 'cmi-node';
 
 const handleCallback = createNestJSHandler(gateway, {
+  // Runs before CMI is answered: check the order, its amount and that it is not already paid
+  validateOrder: async (result) => {
+    const order = await db.orders.findOne({ id: result.orderData!.orderId });
+    return !!order && order.status !== 'paid' && order.amount === result.orderData!.amount;
+  },
   onSuccess: async (result) => {
     // await updateOrder(result.orderData?.orderId);
   },
@@ -411,7 +426,7 @@ export class AppModule {}
 
 import { CMIPaymentGateway } from 'cmi-node';
 
-const gateway = new CMIPaymentGateway({
+export const gateway = new CMIPaymentGateway({
   storeKey: process.env.CMI_STORE_KEY!,
   clientId: process.env.CMI_CLIENT_ID!,
   gatewayUrl: 'https://testpayment.cmi.co.ma/fim/est3Dgate',
@@ -464,9 +479,15 @@ export default async function handler(
 import { createNextJsHandler } from 'cmi-node';
 import { gateway } from '../../../lib/cmi-gateway-config';
 
+// Next.js parses the form-encoded CMI callback for API routes by default.
 export default createNextJsHandler(gateway, {
+  // Runs before CMI is answered: return false to refuse the payment
+  validateOrder: async (result) => {
+    const order = await db.orders.findOne({ id: result.orderData!.orderId });
+    return !!order && order.status !== 'paid' && order.amount === result.orderData!.amount;
+  },
   onSuccess: async (result) => {
-    // Update order ID
+    await db.orders.update(result.orderData!.orderId, { status: 'paid' });
   },
   onFailure: async (result) => {
     console.error('Payment failed:', result.message);
@@ -552,11 +573,21 @@ export const POST = createNextJsAppRouterHandler(gateway, {
 
 ### 4. Fastify
 
+CMI posts the callback as `application/x-www-form-urlencoded`, which Fastify does not parse on its own: install and register `@fastify/formbody`, or the callback is rejected with HTTP 415.
+
+```bash
+npm install @fastify/formbody
+```
+
 ```typescript
 import Fastify from 'fastify';
-import { CMIPaymentGateway, createFastifyHandler, registerFastifyCallback } from 'cmi-node';
+import formbody from '@fastify/formbody';
+import { CMIPaymentGateway, createFastifyHandler } from 'cmi-node';
 
 const fastify = Fastify();
+
+// ⚠️ IMPORTANT: parses CMI's form-encoded callback
+await fastify.register(formbody);
 
 const gateway = new CMIPaymentGateway({
   storeKey: process.env.CMI_STORE_KEY!,
@@ -582,27 +613,41 @@ fastify.post('/cmi/pay', async (request, reply) => {
   return reply.type('text/html').send(gateway.generatePaymentForm(params));
 });
 
-// Option A — manual route registration
+// Handle the CMI callback
 fastify.post('/cmi/callback', createFastifyHandler(gateway, {
+  // Runs before CMI is answered: return false to refuse the payment
+  validateOrder: async (result) => {
+    const order = await db.orders.findOne({ id: result.orderData!.orderId });
+    return !!order && order.status !== 'paid' && order.amount === result.orderData!.amount;
+  },
   onSuccess: async (result) => {
-    // await db.orders.update(result.orderData?.orderId, { status: 'paid' });
+    await db.orders.update(result.orderData!.orderId, { status: 'paid' });
   },
   onFailure: (result) => {
     console.error('Payment failed:', result.message);
   },
 }));
 
-// Option B — auto-register with registerFastifyCallback
-registerFastifyCallback(fastify, gateway, {
-  path: '/cmi/callback',
-  onSuccess: async (result) => {
-    // await updateOrder(result.orderData?.orderId);
-  },
-});
-
 fastify.listen({ port: 3000, host: '0.0.0.0' }, (err, address) => {
   if (err) throw err;
   console.log(`Server running at ${address}`);
+});
+```
+
+Instead of `fastify.post(...)`, you can let the SDK register the route (use one or the other, not both: Fastify refuses two handlers for the same route):
+
+```typescript
+import { registerFastifyCallback } from 'cmi-node';
+
+registerFastifyCallback(fastify, gateway, {
+  path: '/cmi/callback',            // Default: '/api/payment/callback'
+  validateOrder: async (result) => {
+    const order = await db.orders.findOne({ id: result.orderData!.orderId });
+    return !!order && order.status !== 'paid' && order.amount === result.orderData!.amount;
+  },
+  onSuccess: async (result) => {
+    await db.orders.update(result.orderData!.orderId, { status: 'paid' });
+  },
 });
 ```
 
@@ -614,7 +659,7 @@ fastify.listen({ port: 3000, host: '0.0.0.0' }, (err, address) => {
 import { serve } from '@hono/node-server'
 import 'dotenv/config'
 import { Hono } from 'hono'
-import { CMIPaymentGateway, createHonoHandler, registerHonoCallback } from 'cmi-node';
+import { CMIPaymentGateway, createHonoHandler } from 'cmi-node';
 
 const app = new Hono()
 
@@ -653,21 +698,17 @@ app.post('/pay', (c) => {
   }
 });
 
-// Option A — manual route registration
+// Handle the CMI callback (the adapter reads the form-encoded body itself)
 app.post('/cmi/callback', createHonoHandler(gateway, {
+  // Runs before CMI is answered: return false to refuse the payment
+  validateOrder: async (result) => {
+    const order = await db.orders.findOne({ id: result.orderData!.orderId });
+    return !!order && order.status !== 'paid' && order.amount === result.orderData!.amount;
+  },
   onSuccess: async (result) => {
-    // Update order status in your database, etc.
+    await db.orders.update(result.orderData!.orderId, { status: 'paid' });
   },
 }));
-
-// Option B — auto-register with registerHonoCallback
-registerHonoCallback(app, gateway, {
-  path: '/cmi/callback',
-  onSuccess: async (result) => {
-    // Update order status in your database, etc.
-    console.log('Payment successful:', result.orderData);
-  },
-});
 
 serve({
   fetch: app.fetch,
@@ -676,6 +717,23 @@ serve({
   console.log(`Server is running on http://localhost:${info.port}`)
 })
 
+```
+
+Instead of `app.post(...)`, you can let the SDK register the route (use one or the other, not both):
+
+```typescript
+import { registerHonoCallback } from 'cmi-node';
+
+registerHonoCallback(app, gateway, {
+  path: '/cmi/callback',            // Default: '/api/payment/callback'
+  validateOrder: async (result) => {
+    const order = await db.orders.findOne({ id: result.orderData!.orderId });
+    return !!order && order.status !== 'paid' && order.amount === result.orderData!.amount;
+  },
+  onSuccess: async (result) => {
+    await db.orders.update(result.orderData!.orderId, { status: 'paid' });
+  },
+});
 ```
 
 ---
@@ -1009,17 +1067,25 @@ The `storeKey` signs every payment and every callback. Anyone who has it can for
 
 ### 1. Idempotency & Replay Protection
 
-The CMI callback mechanism verifies that the data is authentic, but it does **not** prevent the same callback from being sent twice (replay attack).
+The CMI callback mechanism verifies that the data is authentic, but it does **not** prevent the same callback from being sent twice (replay attack), and the SDK keeps no state between callbacks.
 
-- In your `onSuccess` handler, you **must** check your database to see if the order has already been marked as paid before acting on the result.
+- Do these checks in **`validateOrder`**, not in `onSuccess`. `validateOrder` runs **before** CMI is answered: returning `false` (or throwing) answers `FAILURE`, so CMI does not capture the payment. Most adapters run `onSuccess` **after** CMI has already been told `ACTION=POSTAUTH`, when it is too late to refuse.
+- Check that the order exists, that it is not already paid, and that the amount matches the amount you charged.
+- Then record the payment in `onSuccess`.
 
 ```typescript
+validateOrder: async (result) => {
+  const order = await db.orders.findOne({ id: result.orderData!.orderId });
+  return !!order
+    && order.status !== 'paid'                       // replay
+    && order.amount === result.orderData!.amount;    // amount you charged
+},
 onSuccess: async (result) => {
-  const order = await db.orders.find(result.orderData.orderId);
-  if (order.status === 'paid') return; // Already processed
-  await db.orders.update(order.id, { status: 'paid' });
-}
+  await db.orders.update(result.orderData!.orderId, { status: 'paid' });
+},
 ```
+
+Also make the update idempotent (for example `UPDATE orders SET status = 'paid' WHERE id = ? AND status <> 'paid'`), since two copies of the same callback can arrive at the same time.
 
 ### 2. Content Security Policy (CSP)
 

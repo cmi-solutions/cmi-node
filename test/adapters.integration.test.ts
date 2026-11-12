@@ -121,6 +121,97 @@ describe('Hono 4 (app.request, real Request objects)', () => {
     }
 });
 
+/**
+ * A repeated field reaches the SDK as an array (Express, Fastify) or as its last value
+ * (Hono, web Request). The hash uses the last value, like PHP's $_POST, so validateOrder
+ * must see exactly that value: never the array, never the first value.
+ */
+describe('repeated callback fields: validateOrder sees the signed values', () => {
+    const signed = signedCallback();
+    // A payer replays their own signed callback with fields of another order in front.
+    const prepended = `oid=ATTACKER-ORDER&amount=500.00&${new URLSearchParams(signed).toString()}`;
+    // Fields appended after the signed ones are the ones hashed, so the hash fails.
+    const appended = `${new URLSearchParams(signed).toString()}&oid=ATTACKER-ORDER&amount=500.00`;
+    const post = (body: string) => ({ method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
+
+    type Seen = { orderId: unknown; amount: unknown } | undefined;
+    const recorder = () => {
+        const state: { seen: Seen } = { seen: undefined };
+        const options = {
+            validateOrder: (result: { orderData?: { orderId?: unknown; amount?: unknown } }) => {
+                state.seen = { orderId: result.orderData?.orderId, amount: result.orderData?.amount };
+                return true;
+            },
+        };
+        return { state, options };
+    };
+
+    const servers: Array<[string, (options: object) => Promise<{ url: string; close: () => Promise<void> }>]> = [
+        ...[false, true].map((extended): [string, (options: object) => Promise<{ url: string; close: () => Promise<void> }>] => [
+            `Express 5, urlencoded extended=${extended}`,
+            async (options) => {
+                const app = express();
+                app.use(express.urlencoded({ extended }));
+                app.post('/cb', createExpressMiddleware(gateway, options));
+                const server: Server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
+                return {
+                    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/cb`,
+                    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+                };
+            },
+        ]),
+        ['Fastify 5 with @fastify/formbody', async (options) => {
+            const app = Fastify();
+            await app.register(formbody);
+            app.post('/cb', createFastifyHandler(gateway, options));
+            const base = await app.listen({ port: 0, host: '127.0.0.1' });
+            return { url: `${base}/cb`, close: () => app.close() };
+        }],
+    ];
+
+    for (const [name, start] of servers) {
+        it(`${name}: prepended fields are ignored, the signed order is reported`, async () => {
+            const { state, options } = recorder();
+            const server = await start(options);
+            try {
+                const res = await fetch(server.url, post(prepended));
+                assert.equal(await res.text(), 'ACTION=POSTAUTH');
+                assert.deepEqual(state.seen, { orderId: signed.oid, amount: 120.34 });
+            } finally {
+                await server.close();
+            }
+        });
+
+        it(`${name}: appended fields break the hash`, async () => {
+            const { state, options } = recorder();
+            const server = await start(options);
+            try {
+                const res = await fetch(server.url, post(appended));
+                assert.equal(await res.text(), 'FAILURE');
+                assert.equal(state.seen, undefined);
+            } finally {
+                await server.close();
+            }
+        });
+    }
+
+    it('Hono 4: prepended fields are ignored, the signed order is reported', async () => {
+        const { state, options } = recorder();
+        const app = new Hono();
+        app.post('/cb', createHonoHandler(gateway, options));
+        const res = await app.request('/cb', post(prepended));
+        assert.equal(await res.text(), 'ACTION=POSTAUTH');
+        assert.deepEqual(state.seen, { orderId: signed.oid, amount: 120.34 });
+    });
+
+    it('verifyCallback with array values reports the last (signed) value as a string', () => {
+        const result = gateway.verifyCallback({ ...signed, oid: ['ATTACKER-ORDER', signed.oid], amount: ['500.00', signed.amount] });
+        assert.equal(result.verified, true);
+        assert.equal(result.orderData?.orderId, signed.oid);
+        assert.equal(result.orderData?.amount, 120.34);
+    });
+});
+
 describe('Next.js App Router helper (web-standard Request)', () => {
     for (const [name, body, expected] of cases) {
         it(`${name} -> ${expected}`, async () => {

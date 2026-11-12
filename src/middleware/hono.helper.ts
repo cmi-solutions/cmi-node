@@ -4,6 +4,7 @@ import { CallbackHandler } from "@core/CallbackHandler";
 import { CMIPaymentGateway } from "@core/CMIPaymentGateway";
 import { CallbackHandlerOptions } from "@types";
 import { logger } from "@logger";
+import { readAppRouterParams } from "./nextjs.helper";
 
 /**
  * Create Hono route handler for CMI payment callbacks
@@ -51,22 +52,20 @@ export function createHonoHandler(
 
     return async (c: any) => {
         try {
-            const method = String(c.req.method ?? 'POST').toUpperCase();
-            let params: Record<string, unknown> = {};
-
-            if (method === 'GET') {
-                // The query string is accepted only when supportGetMethod is enabled.
-                if (handler.supportsGetMethod) {
-                    params = Object.fromEntries(new URL(c.req.url).searchParams);
-                }
-            } else {
-                try {
-                    params = await c.req.json();
-                } catch {
-                    // CMI posts application/x-www-form-urlencoded: parse it as a form.
-                    params = (await c.req.parseBody?.()) ?? {};
-                }
-            }
+            // Read the body once (as text, then JSON or form). Trying c.req.json()
+            // first consumed the body on Hono < 4.12.34, so the form-encoded
+            // callback CMI sends could no longer be read. The query string is
+            // accepted only for GET, and only when supportGetMethod is enabled.
+            const params = await readAppRouterParams(
+                {
+                    method: c.req.method,
+                    url: c.req.url,
+                    headers: { get: (name: string) => c.req.header(name) ?? null },
+                    text: () => c.req.text(),
+                    formData: () => c.req.formData(),
+                },
+                { allowQuery: handler.supportsGetMethod }
+            );
 
             // A Response can only be returned once, so onSuccess / onFailure run
             // before the answer is returned (keep them fast, or hand the work to

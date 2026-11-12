@@ -46,8 +46,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a length mismatch.
 - README: new "Handling your storeKey safely" section; JSDoc examples log the order id
   instead of the full callback data.
+- A callback field sent twice (`oid=A&oid=B`) is now reported with the value that was
+  verified. Express and Fastify parse a repeated field into an array: the hash used its
+  last value (as PHP's `$_POST` does), but `orderData` reported the array and the first
+  amount, so a payer could prepend another order's id and amount to their own signed
+  callback and have them passed to `validateOrder` and `onSuccess`.
+- README: every framework example now checks the order (exists, not already paid,
+  amount) in `validateOrder`, which runs before CMI is answered, instead of in `onSuccess`.
 
 ### Fixed
+- The Hono adapter answered `500 FAILURE` to every form-encoded callback on Hono 4.0.0
+  to 4.12.26: trying `json()` first consumed the request body. It now reads the body once.
+  CI also runs the adapter tests on Hono 4.0.0.
+- README: the Fastify example registers `@fastify/formbody` (without it CMI's callback got
+  HTTP 415) and no longer registers the same route twice; the Next.js Pages Router
+  example exports `gateway`; duplicated object keys removed from the Express and NestJS
+  examples; the manual Express handler answers with `handler.getResponse()`.
 - Amounts with more than 2 decimals are rounded half-up to the cent on their decimal
   digits, like CMI's gateway (`125.6578` → `125.66`, `125.3333` → `125.33`). The old
   `Number.toFixed(2)` rounding was wrong for some values (`1.005` → `"1.00"`, now `"1.01"`).
