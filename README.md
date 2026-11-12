@@ -715,6 +715,7 @@ Creates payment parameters for initiating a payment. Returns a `PaymentParams` o
 | `failUrl` | `string` | ✅ | — | Redirect URL on failure (must use `http(s)://`) |
 | `shopUrl` | `string` | ✅ | — | Your shop URL (must use `http(s)://`) |
 | `currency` | `string` | ✅ | — | Currency code or numeric. Must be `"504"` or `"MAD"`.|
+| `currency` | `string` | ✅ | — | Currency code or numeric. Must be `"504"` or `"MAD"`.|
 | `oid` | `string` | ❌ | 64 | Order ID (auto-generated if omitted) |
 | `rnd` | `string` | ❌ | 20 | Random value (auto-generated if omitted, must be alphabetic) |
 | `lang` | `string` | ❌ | — | Language code: `"fr"`, `"en"`, `"ar"`, etc. (default: `"fr"`) |
@@ -723,6 +724,8 @@ Creates payment parameters for initiating a payment. Returns a `PaymentParams` o
 | `AutoRedirect` | `boolean` | ❌ | — | Auto-redirect after payment (default: `false`) |
 | `hashAlgorithm` | `string` | ❌ | — | Must be `"ver3"` if provided |
 | `encoding` | `string` | ❌ | — | Must be `"UTF-8"` if provided (default: `"UTF-8"`) |
+| `amountCur` | `number` | ❌ | — | Display amount in foreign currency (requires `symbolCur`) |
+| `symbolCur` | `string` | ❌ | — | Foreign currency code, e.g. `"840"` for USD (requires `amountCur`) |
 | `amountCur` | `number` | ❌ | — | Display amount in foreign currency (requires `symbolCur`) |
 | `symbolCur` | `string` | ❌ | — | Foreign currency code, e.g. `"840"` for USD (requires `amountCur`) |
 | `sessiontimeout` | `number` | ❌ | — | CMI hosted page session timeout in seconds. Min: 30, Max: 2700, Default: 1800. |
