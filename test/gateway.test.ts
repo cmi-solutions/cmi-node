@@ -1198,6 +1198,22 @@ describe('Fastify Adapter', () => {
 // --- Hono Adapter ---
 import { createHonoHandler, registerHonoCallback } from '../src/middleware/hono.helper.js';
 
+/** A Hono-like `c.req` around a real web Request (the methods the adapter uses). */
+function honoRequest(body: string, contentType: string) {
+    const request = new Request('https://example.com/callback', {
+        method: 'POST',
+        headers: { 'content-type': contentType },
+        body,
+    });
+    return {
+        method: 'POST',
+        url: request.url,
+        header: (name: string) => request.headers.get(name) ?? undefined,
+        text: () => request.text(),
+        formData: () => request.formData(),
+    };
+}
+
 describe('Hono Adapter', () => {
     let gateway: CMIPaymentGateway;
     beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
@@ -1219,10 +1235,8 @@ describe('Hono Adapter', () => {
         let responseBody = '';
         let responseStatus = 0;
         const mockContext = {
-            req: {
-                json: async () => cb,
-                url: 'https://example.com/callback',
-            },
+            // CMI posts the callback form-encoded.
+            req: honoRequest(new URLSearchParams(cb).toString(), 'application/x-www-form-urlencoded'),
             text: (body: string, status: number) => {
                 responseBody = body;
                 responseStatus = status;
@@ -1237,20 +1251,18 @@ describe('Hono Adapter', () => {
         assert.strictEqual(responseBody, 'APPROVED');
     });
 
-    it('should fallback to parseBody when json() fails', async () => {
+    it('should also accept a JSON body', async () => {
         const handler = createHonoHandler(gateway);
 
         const params = gateway.createPaymentParams(validPaymentRequest);
         const cb = simulateCMICallback(params, validConfig.storeKey);
 
+        let responseBody = '';
         let responseStatus = 0;
         const mockContext = {
-            req: {
-                json: async () => { throw new Error('not json'); },
-                parseBody: async () => cb,
-                url: 'https://example.com/callback',
-            },
+            req: honoRequest(JSON.stringify(cb), 'application/json'),
             text: (body: string, status: number) => {
+                responseBody = body;
                 responseStatus = status;
                 return new Response(body, { status });
             }
@@ -1259,6 +1271,7 @@ describe('Hono Adapter', () => {
         await handler(mockContext);
 
         assert.strictEqual(responseStatus, 200);
+        assert.strictEqual(responseBody, 'APPROVED');
     });
 
     it('should return 500 on error', async () => {
@@ -1271,10 +1284,7 @@ describe('Hono Adapter', () => {
 
         let responseStatus = 0;
         const mockContext = {
-            req: {
-                json: async () => cb,
-                url: 'https://example.com/callback',
-            },
+            req: honoRequest(new URLSearchParams(cb).toString(), 'application/x-www-form-urlencoded'),
             text: (body: string, status: number) => {
                 responseStatus = status;
                 return new Response(body, { status });
