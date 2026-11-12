@@ -3,6 +3,7 @@
 import {
   PaymentConfig,
   PaymentRequest,
+  PaymentParams,
   CallbackResult,
   ConfirmationMode,
   CallbackMiddleware,
@@ -10,6 +11,7 @@ import {
 } from "@types";
 import { ConfigValidator } from "@validators";
 import { SecretString } from "@utils";
+import { assertServerRuntime, warnIfWeakStoreKey } from "@utils/runtime-guard.util";
 import { logger } from "@logger";
 import { CallbackHandler } from "./CallbackHandler";
 import { PaymentBuilder } from "./PaymentBuilder";
@@ -39,7 +41,7 @@ import { CallbackVerifier } from "./CallbackVerifier";
  * ```
  */
 export class CMIPaymentGateway {
-  // config intentionally does NOT carry storeKey — it lives only in secureStoreKey.
+  // config intentionally does NOT carry storeKey — it lives only in #storeKey.
   private readonly config: Omit<PaymentConfig, 'storeKey'> & {
     confirmationMode?: ConfirmationMode;
   };
@@ -49,8 +51,9 @@ export class CMIPaymentGateway {
   private readonly formGenerator: FormGenerator;
   private readonly callbackVerifier: CallbackVerifier;
 
-  // Secure storage for storeKey
-  private readonly secureStoreKey: SecretString;
+  // The storeKey lives only here: an ES private field (unreachable from outside the
+  // class at runtime) holding a SecretString (masked in toString/toJSON/inspect).
+  readonly #storeKey: SecretString;
 
   private callbackHandler: CallbackHandler | null = null;
   private middleware: CallbackMiddleware | null = null;
@@ -67,6 +70,8 @@ export class CMIPaymentGateway {
     config: PaymentConfig & { confirmationMode?: ConfirmationMode | string },
     options: CMIPaymentGatewayOptions = {}
   ) {
+    assertServerRuntime();
+
     // Validate configuration, normalize keys case-insensitively, and reject unknowns/duplicates
     const normalizedConfig = ConfigValidator.normalizeAndValidate(config as Record<string, any>);
 
@@ -82,9 +87,10 @@ export class CMIPaymentGateway {
 
     // Wrap storeKey in SecretString to prevent accidental exposure BEFORE
     // storing config — storeKey is deliberately excluded from this.config.
-    this.secureStoreKey = new SecretString(normalizedConfig.storeKey);
+    this.#storeKey = new SecretString(normalizedConfig.storeKey);
+    warnIfWeakStoreKey(this.#storeKey);
 
-    // Store config WITHOUT storeKey — the key lives only in secureStoreKey.
+    // Store config WITHOUT storeKey — the key lives only in #storeKey.
     const { storeKey: _dropped, ...configWithoutKey } = normalizedConfig;
     this.config = {
       ...configWithoutKey,
@@ -95,7 +101,7 @@ export class CMIPaymentGateway {
     // Initialize extracted components with SecretString
     this.paymentBuilder = new PaymentBuilder({
       clientId: this.config.clientId,
-      storeKey: this.secureStoreKey,
+      storeKey: this.#storeKey,
       storetype: this.config.storetype,
       trantype: this.config.trantype,
       accountType: normalizedAccountType,
@@ -105,7 +111,7 @@ export class CMIPaymentGateway {
     this.formGenerator = new FormGenerator(this.config.gatewayUrl);
 
     this.callbackVerifier = new CallbackVerifier({
-      storeKey: this.secureStoreKey,
+      storeKey: this.#storeKey,
       confirmationMode: this.config.confirmationMode ?? 'manual',
     });
 
@@ -129,11 +135,8 @@ export class CMIPaymentGateway {
   ): void {
     // Create handler
     this.callbackHandler = new CallbackHandler(this, {
-      onSuccess: userCallbackConfig?.onSuccess,
-      onFailure: userCallbackConfig?.onFailure,
+      ...userCallbackConfig,
       autoRespond: userCallbackConfig?.autoRespond ?? true,
-      successResponse: userCallbackConfig?.successResponse,
-      failureResponse: userCallbackConfig?.failureResponse,
       supportGetMethod: userCallbackConfig?.supportGetMethod ?? false,
     });
 
@@ -191,13 +194,19 @@ export class CMIPaymentGateway {
         `CMI Payment Gateway: Failed to register callback at POST ${callbackPath}. ` +
         `Ensure you passed a valid Express app instance. Original error: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
+        { cause: error }
       );
     }
   }
 
   /**
    * Create callback handler manually (if not using auto-setup)
+   * 
+   * @warning Do not use this method if you have already registered a callback 
+   * endpoint via the constructor options (`options.app`) or via another helper, 
+   * as registering multiple handlers on the same route may cause your `onSuccess` 
+   * callback to execute twice.
    */
   createCallbackHandler(
     options?: CMIPaymentGatewayOptions["callbackConfig"]
@@ -223,8 +232,8 @@ export class CMIPaymentGateway {
    * });
    * ```
    */
-  createPaymentParams(paymentRequest: PaymentRequest): Record<string, any> {
-    return this.paymentBuilder.build(paymentRequest);
+  createPaymentParams(paymentRequest: PaymentRequest): PaymentParams {
+    return this.paymentBuilder.build(paymentRequest) as PaymentParams;
   }
 
   /**
@@ -241,8 +250,20 @@ export class CMIPaymentGateway {
    * res.send(form);
    * ```
    */
-  generatePaymentForm(params: Record<string, any>, options?: { nonce?: string }): string {
+  generatePaymentForm(params: Readonly<Record<string, unknown>>, options?: { nonce?: string }): string {
     return this.formGenerator.generate(params, options);
+  }
+
+  /**
+   * Generate only the escaped hidden `<input>` elements, for a custom form
+   * (for example when a strict Content-Security-Policy forbids the inline
+   * script of {@link generatePaymentForm}).
+   *
+   * @param params Payment parameters from {@link createPaymentParams}
+   * @returns One `<input type="hidden">` string per parameter
+   */
+  generatePaymentInputs(params: Readonly<Record<string, unknown>>): string[] {
+    return this.formGenerator.generateInputs(params);
   }
 
   /**
@@ -261,8 +282,8 @@ export class CMIPaymentGateway {
    * }
    * ```
    */
-  verifyCallback(callbackParams: Record<string, any>): CallbackResult {
-    return this.callbackVerifier.verify(callbackParams);
+  verifyCallback(callbackParams: Readonly<Record<string, unknown>>): CallbackResult {
+    return this.callbackVerifier.verify(callbackParams as Record<string, any>);
   }
 
   /**

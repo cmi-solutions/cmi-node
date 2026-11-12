@@ -36,6 +36,9 @@ export class PaymentValidator extends Validator {
     'amountcur': 'amountCur',
     'symbolcur': 'symbolCur',
     'description': 'description',
+    'sessiontimeout': 'sessiontimeout',
+    'redirectget': 'redirectGet',
+    'callbackresponse': 'CallbackResponse',
   };
 
   /**
@@ -48,10 +51,17 @@ export class PaymentValidator extends Validator {
     const normalized: Record<string, any> = {};
 
     for (const [key, value] of Object.entries(raw)) {
+      // A "__proto__" own property (e.g. from JSON.parse) would replace the
+      // prototype of the normalized object instead of becoming a field.
+      if (key === '__proto__') {
+        throw new Error('Invalid field name "__proto__" in payment request.');
+      }
       const lowerKey = key.toLowerCase();
-      const canonicalKey = this.PAYMENT_REQUEST_SCHEMA_MAP[lowerKey] ?? key; // keep custom fields as-is
+      const canonicalKey = Object.prototype.hasOwnProperty.call(this.PAYMENT_REQUEST_SCHEMA_MAP, lowerKey)
+        ? this.PAYMENT_REQUEST_SCHEMA_MAP[lowerKey]
+        : key; // keep custom fields as-is
 
-      if (canonicalKey in normalized) {
+      if (Object.prototype.hasOwnProperty.call(normalized, canonicalKey)) {
         throw new Error(
           `Duplicate field detected: "${key}" maps to the same field as a previously provided key ("${canonicalKey}"). ` +
           `Ensure each field is provided only once.`
@@ -67,8 +77,6 @@ export class PaymentValidator extends Validator {
   static validate(request: PaymentRequest, accountType: AccountTypeValue = 'inshore'): void {
     // Check for duplicate/conflicting field names (case-insensitive)
     this.checkDuplicateFields(request);
-
-    // TODO : add a check duplicates for the accountType
 
     // Validate amount exists and is a valid number
     if (request.amount === undefined || request.amount === null) {
@@ -125,11 +133,6 @@ export class PaymentValidator extends Validator {
       throw new Error("BillToName cannot exceed 255 characters");
     }
 
-    if (this.hasSpecialCharacters(request.BillToName)) {
-      throw new Error(
-        "BillToName contains special characters or consecutive spaces which are not allowed"
-      );
-    }
 
     if (!request.currency || !isSupportedCurrency(request.currency)) {
       throw new Error(
@@ -224,16 +227,14 @@ export class PaymentValidator extends Validator {
       }
     }
 
-    // Validate rnd if provided - must be non-empty
+    // Validate rnd if provided - must be a non-empty string within length limit.
+    // The CMI spec does not restrict rnd to alphabetic characters only.
     if (request.rnd !== undefined) {
       if (typeof request.rnd !== 'string' || request.rnd.trim().length === 0) {
         throw new Error("rnd must be a non-empty string when provided");
       }
       if (request.rnd.length > 20) {
         throw new Error("rnd cannot exceed 20 characters");
-      }
-      if (!/^[a-zA-Z]+$/.test(request.rnd)) {
-        throw new Error("rnd must be purely alphabetic");
       }
     }
 
@@ -266,7 +267,19 @@ export class PaymentValidator extends Validator {
       }
     }
 
-
+    // Validate sessiontimeout if provided
+    if (request.sessiontimeout !== undefined) {
+      if (typeof request.sessiontimeout !== 'number' || !Number.isFinite(request.sessiontimeout)) {
+        throw new Error(
+          "sessiontimeout must be a number (seconds). Min: 30, Max: 2700, Default: 1800."
+        );
+      }
+      if (request.sessiontimeout < 30 || request.sessiontimeout > 2700) {
+        throw new Error(
+          `sessiontimeout must be between 30 and 2700 seconds (got ${request.sessiontimeout}).`
+        );
+      }
+    }
 
     // Validate other billing fields if provided
     const billingFields: Array<{ key: keyof PaymentRequest; label: string; maxLen: number }> = [
@@ -288,11 +301,6 @@ export class PaymentValidator extends Validator {
         }
         if (value.length > field.maxLen) {
           throw new Error(`${field.label} cannot exceed ${field.maxLen} characters`);
-        }
-        if (this.hasSpecialCharacters(value)) {
-          throw new Error(
-            `${field.label} contains special characters or consecutive spaces which are not allowed`
-          );
         }
       }
     }

@@ -17,6 +17,7 @@
  * - Logger (level filtering, configureLogger, resetLogger)
  * - Deterministic hash anchor (known input → known output)
  * - Middleware (mock HTTP context)
+ * - Full CMI callback orderData fields (success + failure cases)
  */
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
@@ -87,9 +88,9 @@ function simulateCMICallback(
 function makeMockRes() {
     const res: Record<string, any> = { _status: 0, _body: '' };
     res.status = (code: number) => { res._status = code; return res; };
-    res.send   = (body: any)    => { res._body  = body;  return res; };
-    res.json   = (data: any)    => { res._body  = JSON.stringify(data); return res; };
-    res.end    = ()             => {};
+    res.send = (body: any) => { res._body = body; return res; };
+    res.json = (data: any) => { res._body = JSON.stringify(data); return res; };
+    res.end = () => { };
     return res;
 }
 
@@ -395,7 +396,7 @@ describe('SecretString', () => {
         const inspectSymbol = Symbol.for('nodejs.util.inspect.custom');
         // Access via type-safe cast to avoid implicit-any on symbol indexing
         const inspectFn = (s as unknown as Record<symbol, () => string>)[inspectSymbol];
-        const inspect   = inspectFn.call(s);
+        const inspect = inspectFn.call(s);
         assert.ok(inspect.includes('********'));
         assert.ok(!inspect.includes('super-secret'));
     });
@@ -455,7 +456,7 @@ describe('HashUtil', () => {
 
     it('should work with SecretString', () => {
         const params = { amount: '100.00' };
-        const plain  = HashUtil.generate(params, 'my-store-key');
+        const plain = HashUtil.generate(params, 'my-store-key');
         const secret = HashUtil.generate(params, new SecretString('my-store-key'));
         assert.strictEqual(plain, secret);
     });
@@ -479,31 +480,31 @@ describe('HashUtil', () => {
      *     let hashval = '';
      *     for (const k of sorted) {
      *       if (k.toLowerCase() !== 'hash' && k.toLowerCase() !== 'encoding') {
-     *         const v = String(params[k]).trim().replace(/\\\\/g,'\\\\\\\\').replace(/\|/g,'\\\\|');
+     *         const v = String(params[k]).trim().replace(/\\\\/g,'\\\\\\\\').replace(/\\|/g,'\\\\|');
      *         hashval += v + '|';
      *       }
      *     }
-     *     const ek = key.replace(/\\\\/g,'\\\\\\\\').replace(/\|/g,'\\\\|');
+     *     const ek = key.replace(/\\\\/g,'\\\\\\\\').replace(/\\|/g,'\\\\|');
      *     hashval += ek;
      *     const hex = crypto.createHash('sha512').update(hashval,'utf8').digest('hex');
      *     console.log(Buffer.from(hex,'hex').toString('base64'));
      *   "
      */
     it('deterministic hash anchor — any algorithm change will fail this test', async () => {
-        const params   = { amount: '100.00', oid: 'ANCHOR_ORDER' };
+        const params = { amount: '100.00', oid: 'ANCHOR_ORDER' };
         const storeKey = 'anchor-test-key';
-        const actual   = HashUtil.generate(params, storeKey);
+        const actual = HashUtil.generate(params, storeKey);
 
         // Recompute expected inline so we don't rely on a pre-stored constant
-        const crypto   = await import('crypto');
-        const sorted   = Object.keys(params).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-        let hashval    = '';
+        const crypto = await import('crypto');
+        const sorted = Object.keys(params).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+        let hashval = '';
         for (const k of sorted) {
             const v = String((params as any)[k]).trim().replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
             hashval += v + '|';
         }
-        hashval   += storeKey.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
-        const hex  = crypto.createHash('sha512').update(hashval, 'utf8').digest('hex');
+        hashval += storeKey.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+        const hex = crypto.createHash('sha512').update(hashval, 'utf8').digest('hex');
         const expected = Buffer.from(hex, 'hex').toString('base64');
 
         assert.strictEqual(actual, expected, 'Hash algorithm produced unexpected output — algorithm may have changed');
@@ -704,11 +705,10 @@ describe('PaymentValidator', () => {
         );
     });
 
-    it('should throw for BillToName with special characters', () => {
-        assert.throws(
-            () => PaymentValidator.validate({ ...validPaymentRequest, BillToName: 'John@Doe' } as any),
-            /BillToName/
-        );
+    it('should clean BillToName special characters like CMI PHP (not reject them)', () => {
+        const gw = new CMIPaymentGateway(validConfig);
+        const params = gw.createPaymentParams({ ...validPaymentRequest, BillToName: 'John@Doe' });
+        assert.strictEqual(params.BillToName, 'JohnDoe');
     });
 
     it('should throw for deprecated phone field', () => {
@@ -724,6 +724,34 @@ describe('PaymentValidator', () => {
             /Duplicate fields/
         );
     });
+
+    // ── FIX 2: sessiontimeout validation ──────────────────────────────────────
+    it('sessiontimeout: accepts valid value (within 30–2700)', () => {
+        assert.doesNotThrow(() =>
+            PaymentValidator.validate({ ...validPaymentRequest, sessiontimeout: 1800 } as any)
+        );
+    });
+
+    it('sessiontimeout: throws for value below minimum (< 30)', () => {
+        assert.throws(
+            () => PaymentValidator.validate({ ...validPaymentRequest, sessiontimeout: 10 } as any),
+            /sessiontimeout.*30/i
+        );
+    });
+
+    it('sessiontimeout: throws for value above maximum (> 2700)', () => {
+        assert.throws(
+            () => PaymentValidator.validate({ ...validPaymentRequest, sessiontimeout: 3000 } as any),
+            /sessiontimeout.*2700/i
+        );
+    });
+
+    it('sessiontimeout: throws for non-number value', () => {
+        assert.throws(
+            () => PaymentValidator.validate({ ...validPaymentRequest, sessiontimeout: 'fast' } as any),
+            /sessiontimeout/i
+        );
+    });
 });
 
 // ===========================================================================
@@ -731,7 +759,7 @@ describe('PaymentValidator', () => {
 // ===========================================================================
 describe('CMIPaymentGateway - generatePaymentForm', () => {
     it('should generate HTML form with POST method', () => {
-        const gw   = new CMIPaymentGateway(validConfig);
+        const gw = new CMIPaymentGateway(validConfig);
         const params = gw.createPaymentParams(validPaymentRequest);
         const form = gw.generatePaymentForm(params);
         assert.ok(form.includes('<form'));
@@ -740,7 +768,7 @@ describe('CMIPaymentGateway - generatePaymentForm', () => {
     });
 
     it('should prevent XSS via HTML-escaping of custom fields', () => {
-        const gw   = new CMIPaymentGateway(validConfig);
+        const gw = new CMIPaymentGateway(validConfig);
         const params = gw.createPaymentParams({
             ...validPaymentRequest,
             customField: '<script>alert(1)</script>',
@@ -752,7 +780,7 @@ describe('CMIPaymentGateway - generatePaymentForm', () => {
     });
 
     it('should auto-submit on page load (script tag)', () => {
-        const gw   = new CMIPaymentGateway(validConfig);
+        const gw = new CMIPaymentGateway(validConfig);
         const params = gw.createPaymentParams(validPaymentRequest);
         const form = gw.generatePaymentForm(params);
         assert.ok(form.includes('<script'), 'Form should include script tag');
@@ -763,7 +791,7 @@ describe('CMIPaymentGateway - generatePaymentForm', () => {
     });
 
     it('should support CSP nonce in payment form', () => {
-        const gw   = new CMIPaymentGateway(validConfig);
+        const gw = new CMIPaymentGateway(validConfig);
         const params = gw.createPaymentParams(validPaymentRequest);
         const nonce = 'test-nonce-123';
         const form = gw.generatePaymentForm(params, { nonce });
@@ -785,8 +813,8 @@ describe('CallbackHandler', () => {
     });
 
     it('should process valid callback via handle()', async () => {
-        const h  = gateway.createCallbackHandler();
-        const p  = gateway.createPaymentParams(validPaymentRequest);
+        const h = gateway.createCallbackHandler();
+        const p = gateway.createPaymentParams(validPaymentRequest);
         const cb = simulateCMICallback(p, validConfig.storeKey);
         const result = await h.handle(cb);
         assert.strictEqual(result.success, true, result.message);
@@ -809,10 +837,11 @@ describe('CallbackHandler', () => {
 
     it('should return correct response string for auto mode', () => {
         const gw = new CMIPaymentGateway({ ...validConfig, confirmationMode: 'auto' });
-        const h  = gw.createCallbackHandler();
+        const h = gw.createCallbackHandler();
         const resp = h.getResponse({
             success: true,
             status: 'ACTION=POSTAUTH',
+            verified: true,
             message: 'ok',
             orderData: { orderId: 'T', amount: 100, currency: '504', transactionId: 'TX' },
         });
@@ -821,12 +850,12 @@ describe('CallbackHandler', () => {
     });
 
     it('middleware — should call onSuccess and send 200 for valid callback', async () => {
-        const p  = gateway.createPaymentParams(validPaymentRequest);
+        const p = gateway.createPaymentParams(validPaymentRequest);
         const cb = simulateCMICallback(p, validConfig.storeKey);
         let successCalled = false;
 
-        const h   = new CallbackHandler(gateway, { onSuccess: () => { successCalled = true; } });
-        const mw  = h.middleware();
+        const h = new CallbackHandler(gateway, { onSuccess: () => { successCalled = true; } });
+        const mw = h.middleware();
         const req = makeMockReq(cb);
         const res = makeMockRes();
 
@@ -838,8 +867,8 @@ describe('CallbackHandler', () => {
 
     it('middleware — should send FAILURE and call onFailure for bad hash', async () => {
         let failCalled = false;
-        const h   = new CallbackHandler(gateway, { onFailure: () => { failCalled = true; } });
-        const mw  = h.middleware();
+        const h = new CallbackHandler(gateway, { onFailure: () => { failCalled = true; } });
+        const mw = h.middleware();
         const req = makeMockReq({ HASH: 'wrong', amount: '100' });
         const res = makeMockRes();
 
@@ -850,11 +879,11 @@ describe('CallbackHandler', () => {
     });
 
     it('middleware — should call next() when autoRespond is false', async () => {
-        const p  = gateway.createPaymentParams(validPaymentRequest);
+        const p = gateway.createPaymentParams(validPaymentRequest);
         const cb = simulateCMICallback(p, validConfig.storeKey);
 
-        const h   = new CallbackHandler(gateway, { autoRespond: false });
-        const mw  = h.middleware();
+        const h = new CallbackHandler(gateway, { autoRespond: false });
+        const mw = h.middleware();
         const req = makeMockReq(cb);
         const res = makeMockRes();
         let nextCalled = false;
@@ -869,6 +898,7 @@ describe('CallbackHandler', () => {
 // ===========================================================================
 // 14. Logger
 // ===========================================================================
+
 describe('Logger', () => {
     afterEach(() => { resetLogger(); });
 
@@ -920,8 +950,8 @@ describe('Logger', () => {
 // ===========================================================================
 
 // --- Express Adapter ---
-import { createExpressMiddleware, createCallbackHandler } from '../src/middleware/express.middleware.js';
 
+import { createExpressMiddleware, createCallbackHandler } from '../src/middleware/express.middleware.js';
 describe('Express Adapter', () => {
     let gateway: CMIPaymentGateway;
     beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
@@ -1008,7 +1038,7 @@ describe('Next.js Adapter', () => {
         assert.strictEqual(res._status, 200);
     });
 
-    it('Pages Router handler should return 500 on error', async () => {
+    it('Pages Router handler should still return 200 when onSuccess throws (error is logged)', async () => {
         const handler = createNextJsHandler(gateway, {
             onSuccess: () => { throw new Error('Boom'); }
         });
@@ -1020,7 +1050,8 @@ describe('Next.js Adapter', () => {
 
         await handler(req, res);
 
-        assert.strictEqual(res._status, 500);
+        // Payment was legitimately verified — user-callback errors are caught internally
+        assert.strictEqual(res._status, 200);
     });
 
     it('handleNextJsCallback should return a Response for App Router', async () => {
@@ -1028,10 +1059,12 @@ describe('Next.js Adapter', () => {
         const params = gateway.createPaymentParams(validPaymentRequest);
         const cb = simulateCMICallback(params, validConfig.storeKey);
 
-        // Mock App Router Request with json() method
-        const mockRequest = {
-            json: async () => cb,
-        };
+        // Real web-standard Request with a JSON body
+        const mockRequest = new Request('https://shop.example.ma/api/cb', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(cb),
+        });
 
         const response = await handleNextJsCallback(gateway, mockRequest, {
             onSuccess: () => { successCalled = true; }
@@ -1042,19 +1075,32 @@ describe('Next.js Adapter', () => {
         assert.strictEqual(response.status, 200);
     });
 
-    it('handleNextJsCallback should fallback to formData', async () => {
-        const params = gateway.createPaymentParams(validPaymentRequest);
+    it('handleNextJsCallback should accept the form-encoded body CMI really sends', async () => {
+        const gw = new CMIPaymentGateway({ ...validConfig, confirmationMode: 'auto' });
+        const params = gw.createPaymentParams(validPaymentRequest);
         const cb = simulateCMICallback(params, validConfig.storeKey);
 
-        // Mock request where json() fails but formData() works
-        const formData = new Map(Object.entries(cb));
-        const mockRequest = {
-            json: async () => { throw new Error('not json'); },
-            formData: async () => ({ entries: () => formData.entries() }),
-        };
+        // A Request body can be read only once: this used to fail with "Body is unusable".
+        const request = new Request('https://shop.example.ma/api/cb', {
+            method: 'POST',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams(cb).toString(),
+        });
 
-        const response = await handleNextJsCallback(gateway, mockRequest);
-        assert.ok(response instanceof Response);
+        const response = await handleNextJsCallback(gw, request);
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(await response.text(), 'ACTION=POSTAUTH');
+    });
+
+    it('handleNextJsCallback should accept a multipart body', async () => {
+        const gw = new CMIPaymentGateway({ ...validConfig, confirmationMode: 'auto' });
+        const params = gw.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+        const form = new FormData();
+        for (const [k, v] of Object.entries(cb)) form.append(k, String(v));
+
+        const response = await handleNextJsCallback(gw, new Request('https://shop.example.ma/api/cb', { method: 'POST', body: form }));
+        assert.strictEqual(await response.text(), 'ACTION=POSTAUTH');
     });
 
     it('handleNextJsCallback should return 500 on error', async () => {
@@ -1106,7 +1152,7 @@ describe('Fastify Adapter', () => {
         assert.strictEqual(reply._code, 200);
     });
 
-    it('should return 500 on error', async () => {
+    it('should still return 200 when onSuccess throws (error is logged)', async () => {
         const handler = createFastifyHandler(gateway, {
             onSuccess: () => { throw new Error('DB error'); }
         });
@@ -1120,8 +1166,8 @@ describe('Fastify Adapter', () => {
 
         await handler({ body: cb }, reply);
 
-        assert.strictEqual(reply._code, 500);
-        assert.strictEqual(reply._body, 'FAILURE');
+        // Payment was legitimately verified — user-callback errors are caught internally
+        assert.strictEqual(reply._code, 200);
     });
 
     it('registerFastifyCallback should register a POST route', () => {
@@ -1188,6 +1234,7 @@ describe('Hono Adapter', () => {
 
         assert.strictEqual(successCalled, true);
         assert.strictEqual(responseStatus, 200);
+        assert.strictEqual(responseBody, 'APPROVED');
     });
 
     it('should fallback to parseBody when json() fails', async () => {
@@ -1236,7 +1283,8 @@ describe('Hono Adapter', () => {
 
         await handler(mockContext);
 
-        assert.strictEqual(responseStatus, 500);
+        // Payment was legitimately verified — user-callback errors are caught internally
+        assert.strictEqual(responseStatus, 200);
     });
 
     it('registerHonoCallback should register a POST route', () => {
@@ -1274,7 +1322,7 @@ describe('NestJS Adapter', () => {
         assert.strictEqual(res._status, 200);
     });
 
-    it('NestJSCallbackHandler should return 500 on error', async () => {
+    it('NestJSCallbackHandler should still return 200 when onSuccess throws (error is logged)', async () => {
         const handler = new NestJSCallbackHandler(gateway, {
             onSuccess: () => { throw new Error('DB crash'); }
         });
@@ -1285,7 +1333,8 @@ describe('NestJS Adapter', () => {
 
         await handler.handle(cb, res);
 
-        assert.strictEqual(res._status, 500);
+        // Payment was legitimately verified — user-callback errors are caught internally
+        assert.strictEqual(res._status, 200);
     });
 
     it('NestJSCallbackHandler.process should return CallbackResult', async () => {
@@ -1304,6 +1353,7 @@ describe('NestJS Adapter', () => {
         const result = {
             success: true as const,
             status: 'APPROVED' as const,
+            verified: true,
             message: 'ok',
             orderData: { orderId: 'T', amount: 100, currency: '504', transactionId: 'TX' },
         };
@@ -1459,13 +1509,14 @@ describe('Validator — Extended Coverage', () => {
         );
     });
 
-    it('should throw for rnd with non-alphabetic chars', () => {
-        assert.throws(
+    it('should accept alphanumeric rnd (CMI spec allows digits)', () => {
+        // The CMI spec does not restrict rnd to alphabetic characters only.
+        // Alphanumeric values like 'abc123' must be accepted.
+        assert.doesNotThrow(
             () => PaymentValidator.validate({
                 ...validPaymentRequest,
                 rnd: 'abc123',
-            } as any),
-            /rnd.*alphabetic/
+            } as any)
         );
     });
 
@@ -1529,14 +1580,13 @@ describe('Validator — Extended Coverage', () => {
         );
     });
 
-    it('should throw for billing field with special chars', () => {
-        assert.throws(
-            () => PaymentValidator.validate({
-                ...validPaymentRequest,
-                BillToCity: '<script>alert(1)</script>',
-            } as any),
-            /BillToCity.*special characters/
-        );
+    it('should strip special chars from billing fields like CMI PHP', () => {
+        const gw = new CMIPaymentGateway(validConfig);
+        const params = gw.createPaymentParams({
+            ...validPaymentRequest,
+            BillToCity: '<script>alert(1)</script>',
+        });
+        assert.strictEqual(params.BillToCity, 'scriptalert1script');
     });
 
     it('should throw for billing field exceeding max length', () => {
@@ -1569,14 +1619,10 @@ describe('Validator — Extended Coverage', () => {
         );
     });
 
-    it('should throw for BillToName with consecutive spaces', () => {
-        assert.throws(
-            () => PaymentValidator.validate({
-                ...validPaymentRequest,
-                BillToName: 'John  Doe',
-            } as any),
-            /BillToName.*special characters/
-        );
+    it('should keep inner consecutive spaces in BillToName, like CMI PHP', () => {
+        const gw = new CMIPaymentGateway(validConfig);
+        const params = gw.createPaymentParams({ ...validPaymentRequest, BillToName: '  John  Doe  ' });
+        assert.strictEqual(params.BillToName, 'John  Doe');
     });
 });
 
@@ -1701,25 +1747,134 @@ describe('PaymentBuilder — description and custom fields', () => {
 // 20. Audit Fixes & Regressions
 // ===========================================================================
 describe('Audit Fixes & Regressions', () => {
-    let gateway: CMIPaymentGateway;
-    beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
 
     it('SecretString should provide runtime privacy via ES2022 #private fields', () => {
         const secret = new SecretString('super-secret-key-123');
-        
+
         // Assert the internal value is not exposed on the object surface
         const keys = Object.keys(secret);
         const ownProps = Object.getOwnPropertyNames(secret);
-        
+
         // Ensure the actual secret string is nowhere in the keys/properties
         assert.ok(!keys.includes('value'));
         assert.ok(!ownProps.includes('value'));
-        
+
         // Using "any" cast to try and access a loose property
         assert.strictEqual((secret as any).value, undefined);
         assert.strictEqual((secret as any)._value, undefined);
-        
+
         // The value should only be accessible through the getter method
         assert.strictEqual(secret.getValue(), 'super-secret-key-123');
+    });
+});
+
+// ===========================================================================
+// 21. Full CMI Callback orderData Fields
+// ===========================================================================
+describe('CallbackVerifier — full orderData fields', () => {
+    let gateway: CMIPaymentGateway;
+    beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
+
+    it('success: exposes returnCode, response, mdStatus, authCode', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '00',
+            TransId: 'TXN_FULL_TEST',
+            Response: 'Approved',
+            mdStatus: '1',
+            AuthCode: 'AUTH123',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.orderData!.returnCode, '00');
+        assert.strictEqual(result.orderData!.response, 'Approved');
+        assert.strictEqual(result.orderData!.mdStatus, '1');
+        assert.strictEqual(result.orderData!.authCode, 'AUTH123');
+    });
+
+    it('success: exposes cardHolderName, maskedPan, transactionDate', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '00',
+            // Exact CMI field names as sent in the callback POST body
+            cardHolderName: 'Ahmed Bennani',
+            MaskedPan: '400000XXXXXX7190',
+            'EXTRA.TRXDATE': '06/05/2026 21:00:00',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true);
+        // orderData property names match the type definition
+        assert.strictEqual(result.orderData!.cardHolderName, 'Ahmed Bennani');
+        assert.strictEqual(result.orderData!.maskedPan, '400000XXXXXX7190');
+        assert.strictEqual(result.orderData!.transactionDate, '06/05/2026 21:00:00');
+    });
+
+    it('success: handles lowercase cardHolderName + maskedPan variants', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        // Some CMI environments send lowercase keys
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '00',
+            CardHolderName: 'Fatima Zahra',
+            maskedPan: '411111XXXXXX4242',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.orderData!.cardHolderName, 'Fatima Zahra');
+        assert.strictEqual(result.orderData!.maskedPan, '411111XXXXXX4242');
+    });
+
+    it('success: handles lowercase EXTRA.TRXDATE variant', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '00',
+            'EXTRA.trxdate': '06052026 210000',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.orderData!.transactionDate, '06052026 210000');
+    });
+
+    it('failure: exposes returnCode, response, mdStatus, errorMessage in orderData', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '05',
+            Response: 'Error',
+            mdStatus: '0',
+            ErrMsg: 'Insufficient funds',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, false);
+        assert.strictEqual(result.errorCode, '05');
+        assert.strictEqual(result.errorMessage, 'Insufficient funds');
+        assert.strictEqual(result.orderData!.returnCode, '05');
+        assert.strictEqual(result.orderData!.response, 'Error');
+        assert.strictEqual(result.orderData!.mdStatus, '0');
+        assert.strictEqual(result.orderData!.errorMessage, 'Insufficient funds');
+    });
+
+    it('failure: handles lowercase errMsg variant', () => {
+        const params = gateway.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '51',
+            errMsg: 'Card declined',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, false);
+        assert.strictEqual(result.errorMessage, 'Card declined');
+        assert.strictEqual(result.orderData!.errorMessage, 'Card declined');
+    });
+
+    it('success: backward compat — existing fields still present', () => {
+        const params = gateway.createPaymentParams({ ...validPaymentRequest, oid: 'COMPAT_ORDER' });
+        const cb = simulateCMICallback(params, validConfig.storeKey, {
+            ProcReturnCode: '00',
+            TransId: 'TXN_COMPAT',
+        });
+        const result = gateway.verifyCallback(cb);
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.orderData!.orderId, 'COMPAT_ORDER');
+        assert.strictEqual(result.orderData!.amount, 100);
+        assert.strictEqual(result.orderData!.currency, '504');
+        assert.strictEqual(result.orderData!.transactionId, 'TXN_COMPAT');
     });
 });

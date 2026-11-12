@@ -1,14 +1,42 @@
 {
   "name": "cmi-node",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Framework-agnostic CMI Payment Gateway SDK with built-in security for Node.js",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "express": [
+        "./dist/adapters/express.d.ts"
+      ],
+      "nextjs": [
+        "./dist/adapters/nextjs.d.ts"
+      ],
+      "fastify": [
+        "./dist/adapters/fastify.d.ts"
+      ],
+      "hono": [
+        "./dist/adapters/hono.d.ts"
+      ],
+      "nestjs": [
+        "./dist/adapters/nestjs.d.ts"
+      ]
+    }
+  },
   "type": "module",
   "sideEffects": false,
   "exports": {
     ".": {
+      "workerd": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "worker": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "browser": "./dist/browser.js",
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -19,6 +47,15 @@
       }
     },
     "./express": {
+      "workerd": {
+        "types": "./dist/adapters/express.d.ts",
+        "default": "./dist/adapters/express.js"
+      },
+      "worker": {
+        "types": "./dist/adapters/express.d.ts",
+        "default": "./dist/adapters/express.js"
+      },
+      "browser": "./dist/browser.js",
       "import": {
         "types": "./dist/adapters/express.d.ts",
         "default": "./dist/adapters/express.js"
@@ -29,6 +66,15 @@
       }
     },
     "./nextjs": {
+      "workerd": {
+        "types": "./dist/adapters/nextjs.d.ts",
+        "default": "./dist/adapters/nextjs.js"
+      },
+      "worker": {
+        "types": "./dist/adapters/nextjs.d.ts",
+        "default": "./dist/adapters/nextjs.js"
+      },
+      "browser": "./dist/browser.js",
       "import": {
         "types": "./dist/adapters/nextjs.d.ts",
         "default": "./dist/adapters/nextjs.js"
@@ -39,6 +85,15 @@
       }
     },
     "./fastify": {
+      "workerd": {
+        "types": "./dist/adapters/fastify.d.ts",
+        "default": "./dist/adapters/fastify.js"
+      },
+      "worker": {
+        "types": "./dist/adapters/fastify.d.ts",
+        "default": "./dist/adapters/fastify.js"
+      },
+      "browser": "./dist/browser.js",
       "import": {
         "types": "./dist/adapters/fastify.d.ts",
         "default": "./dist/adapters/fastify.js"
@@ -49,6 +104,15 @@
       }
     },
     "./hono": {
+      "workerd": {
+        "types": "./dist/adapters/hono.d.ts",
+        "default": "./dist/adapters/hono.js"
+      },
+      "worker": {
+        "types": "./dist/adapters/hono.d.ts",
+        "default": "./dist/adapters/hono.js"
+      },
+      "browser": "./dist/browser.js",
       "import": {
         "types": "./dist/adapters/hono.d.ts",
         "default": "./dist/adapters/hono.js"
@@ -59,6 +123,15 @@
       }
     },
     "./nestjs": {
+      "workerd": {
+        "types": "./dist/adapters/nestjs.d.ts",
+        "default": "./dist/adapters/nestjs.js"
+      },
+      "worker": {
+        "types": "./dist/adapters/nestjs.d.ts",
+        "default": "./dist/adapters/nestjs.js"
+      },
+      "browser": "./dist/browser.js",
       "import": {
         "types": "./dist/adapters/nestjs.d.ts",
         "default": "./dist/adapters/nestjs.js"
@@ -77,15 +150,16 @@
   ],
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "prepublishOnly": "npm run clean && npm run build",
-    "test": "tsx --test test/accountType.test.ts test/gateway.test.ts",
-    "test:coverage": "c8 tsx --test test/**/*.test.ts",
-    "lint": "eslint \"src/**/*.ts\"",
+    "prepublishOnly": "npm run clean && npm run type-check && npm run test && npm run build",
+    "test": "tsx --test test/accountType.test.ts test/gateway.test.ts test/php-parity.test.ts test/review-fixes.test.ts test/secret-leakage.test.ts test/pre-release.test.ts test/adapters.integration.test.ts",
+    "test:coverage": "c8 --check-coverage --lines 92 --branches 86 tsx --test \"test/**/*.test.ts\"",
+    "lint": "eslint src",
     "format": "prettier --write \"src/**/*.ts\"",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsc --noEmit && tsc -p tsconfig.test.json",
     "build": "tsup",
     "dev": "tsup --watch",
-    "prepare": "husky"
+    "prepare": "husky || exit 0",
+    "check:pack": "node scripts/check-pack.mjs"
   },
   "keywords": [
     "payment",
@@ -106,39 +180,44 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/integrationcmi/cmi.git"
+    "url": "git+https://github.com/cmi-solutions/cmi-node.git"
   },
   "bugs": {
-    "url": "https://github.com/integrationcmi/cmi/issues"
+    "url": "https://github.com/cmi-solutions/cmi-node/issues"
   },
-  "homepage": "https://github.com/integrationcmi/cmi#readme",
+  "homepage": "https://github.com/cmi-solutions/cmi-node#readme",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.12.0"
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.5.3",
-    "@commitlint/config-conventional": "^20.5.3",
-    "@types/node": "^20.19.24",
-    "@typescript-eslint/eslint-plugin": "^8.59.2",
-    "@typescript-eslint/parser": "^8.59.2",
-    "c8": "^9.1.0",
-    "eslint": "^8.56.0",
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
+    "@eslint/js": "^10.0.1",
+    "@fastify/formbody": "^8.0.2",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.20.5",
+    "c8": "^12.0.0",
+    "eslint": "^10.14.0",
+    "express": "^5.3.0",
+    "fastify": "^5.12.8",
+    "hono": "^4.13.18",
     "husky": "^9.1.7",
-    "prettier": "^3.2.0",
-    "tsup": "^8.5.1",
-    "tsx": "^4.19.0",
-    "typescript": "^5.4.5"
+    "prettier": "^3.9.10",
+    "tsup": "^9.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.2"
   },
   "publishConfig": {
     "access": "public",
     "provenance": true
   },
   "peerDependencies": {
-    "@nestjs/common": ">=9.0.0",
-    "express": ">=4.0.0",
-    "fastify": ">=4.0.0",
-    "hono": ">=3.0.0",
-    "next": ">=13.0.0"
+    "@nestjs/common": "^10.0.0 || ^11.0.0 || ^12.0.0",
+    "express": "^4.17.0 || ^5.0.0",
+    "fastify": "^4.0.0 || ^5.0.0",
+    "hono": "^4.0.0",
+    "next": "^14.0.0 || ^15.0.0 || ^16.0.0"
   },
   "peerDependenciesMeta": {
     "express": {

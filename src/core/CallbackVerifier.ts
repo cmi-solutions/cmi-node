@@ -19,10 +19,14 @@ export interface CallbackVerifierConfig {
  * Verifies and processes callbacks from CMI gateway
  */
 export class CallbackVerifier {
-    private readonly config: CallbackVerifierConfig;
+    private readonly config: Omit<CallbackVerifierConfig, 'storeKey'>;
+    // ES private field: not reachable from outside the class at runtime.
+    readonly #storeKey: string | SecretString;
 
     constructor(config: CallbackVerifierConfig) {
-        this.config = config;
+        const { storeKey, ...rest } = config;
+        this.#storeKey = storeKey;
+        this.config = rest;
     }
 
     /**
@@ -34,6 +38,23 @@ export class CallbackVerifier {
     }
 
     /**
+     * Resolve a field from callbackParams by trying multiple key variants.
+     * Returns the first non-empty string found, or undefined.
+     */
+    private static resolveField(
+        params: Record<string, any>,
+        ...keys: string[]
+    ): string | undefined {
+        for (const key of keys) {
+            const val = params[key];
+            if (val !== undefined && val !== null && val !== '') {
+                return String(val);
+            }
+        }
+        return undefined;
+    }
+
+    /**
      * Verify callback from CMI
      *
      * Validates the hash (HASH #2 - Incoming) and returns payment status
@@ -42,8 +63,6 @@ export class CallbackVerifier {
      * @returns Callback verification result
      */
     verify(callbackParams: Record<string, any>): CallbackResult {
-
-
         try {
             // Extract received hash
             const receivedHash = callbackParams.HASH || callbackParams.hash;
@@ -52,29 +71,21 @@ export class CallbackVerifier {
                 return {
                     success: false,
                     status: 'FAILURE',
+                    verified: false,
                     message: 'Hash not found in callback',
                 };
             }
 
-            // Prepare params for hash verification (remove hash and encoding, case-insensitively)
-            const paramsForHash: Record<string, any> = {};
-            for (const [key, value] of Object.entries(callbackParams)) {
-                const lowerKey = key.toLowerCase();
-                if (lowerKey !== 'hash' && lowerKey !== 'encoding') {
-                    paramsForHash[key] = value;
-                }
-            }
-
-            // Recalculate hash (HASH #2 - Verify)
-            const calculatedHash = HashUtil.generate(paramsForHash, this.config.storeKey);
-
-
+            // Recalculate the hash over every received field, exactly as CMI's
+            // callback.php does (hash and encoding are skipped inside HashUtil).
+            const calculatedHash = HashUtil.generateForCallback(callbackParams, this.#storeKey);
 
             // Verify hash using constant-time comparison (prevents timing attacks)
-            if (!timingSafeCompare(receivedHash, calculatedHash)) {
+            if (!timingSafeCompare(String(receivedHash), calculatedHash)) {
                 return {
                     success: false,
                     status: 'FAILURE',
+                    verified: false,
                     message: 'Hash verification failed - possible tampering',
                 };
             }
@@ -85,40 +96,107 @@ export class CallbackVerifier {
                 callbackParams.ProcReturnCode ?? callbackParams.ReturnCode ?? ''
             );
 
-            // Check payment status
+            // ── Resolve all callback fields (case variants) ───────────────────────
+
+            // transactionId maps strictly to TransId / transId.
+            // oid / ReturnOid is the order identifier — a completely different field.
+            // If TransId is absent from the payload, transactionId is simply undefined.
+            const transactionId =
+                CallbackVerifier.resolveField(callbackParams, 'TransId', 'transId');
+
+            // Always present (success + failure)
+            const response    = CallbackVerifier.resolveField(callbackParams, 'Response',   'response');
+            const mdStatus    = CallbackVerifier.resolveField(callbackParams, 'mdStatus',   'MdStatus',  'MDSTATUS');
+            const errMsg      = CallbackVerifier.resolveField(callbackParams, 'ErrMsg',     'errMsg',    'ERRMSG');
+            const errCode     = CallbackVerifier.resolveField(callbackParams, 'ErrCode',    'errcode',   'ERRCODE');
+            const returnOid   = CallbackVerifier.resolveField(callbackParams, 'ReturnOid',  'returnOid', 'RETURNOID');
+            const clientIp    = CallbackVerifier.resolveField(callbackParams, 'ClientIp',   'clientIp',  'CLIENTIP');
+
+            // Present on success
+            const authCode    = CallbackVerifier.resolveField(callbackParams, 'AuthCode',   'authCode',  'AUTHCODE');
+            // CMI sends transaction date as 'EXTRA.TRXDATE' (dot in key name)
+            const transactionDate = CallbackVerifier.resolveField(
+                callbackParams, 'EXTRA.TRXDATE', 'EXTRA.trxdate', 'extra.trxdate'
+            );
+            const maskedPan       = CallbackVerifier.resolveField(callbackParams, 'MaskedPan',  'maskedPan',  'MASKEDPAN');
+            const cardHolderName  = CallbackVerifier.resolveField(callbackParams, 'cardHolderName', 'CardHolderName', 'CARDHOLDERNAME');
+            const paymentType     = CallbackVerifier.resolveField(callbackParams, 'paymentType',    'PaymentType',    'PAYMENTTYPE');
+            // CMI sends card brand/issuer as 'EXTRA.CARDBRAND' / 'EXTRA.CARDISSUER' (dot in key name)
+            const cardBrand       = CallbackVerifier.resolveField(
+                callbackParams, 'EXTRA.CARDBRAND', 'EXTRA.cardbrand', 'extra.cardbrand'
+            );
+            const cardIssuer      = CallbackVerifier.resolveField(
+                callbackParams, 'EXTRA.CARDISSUER', 'EXTRA.cardissuer', 'extra.cardissuer'
+            );
+            const cardExpYear     = CallbackVerifier.resolveField(callbackParams, 'EcomPaymentCardExpDateYear',  'ecomPaymentCardExpDateYear');
+            const cardExpMonth    = CallbackVerifier.resolveField(callbackParams, 'EcomPaymentCardExpDateMonth', 'ecomPaymentCardExpDateMonth');
+            const hostRefNum      = CallbackVerifier.resolveField(callbackParams, 'HostRefNum',  'hostRefNum',  'HOSTREFNUM');
+            const acqStan         = CallbackVerifier.resolveField(callbackParams, 'acqStan',     'AcqStan',    'ACQSTAN');
+            const eci             = CallbackVerifier.resolveField(callbackParams, 'eci',         'Eci',        'ECI');
+            const txStatus        = CallbackVerifier.resolveField(callbackParams, 'txstatus',    'txStatus',   'TXSTATUS');
+
+            // ── Build result ───────────────────────────────────────────────────────
+
             if (returnCode === '00') {
-                // Get response based on confirmation mode
-                const response = this.getConfirmationResponse();
+                const confirmationResponse = this.getConfirmationResponse();
 
                 return {
                     success: true,
-                    status: response,
+                    status: confirmationResponse,
+                    verified: true,
                     message: 'Payment successful',
                     orderData: {
                         orderId: callbackParams.oid,
                         amount: CallbackVerifier.safeParseAmount(callbackParams.amount),
                         currency: callbackParams.currency,
-                        transactionId:
-                            callbackParams.TransId ||
-                            callbackParams.transId ||
-                            callbackParams.oid,
+                        transactionId,
+                        // Always present
+                        returnCode,
+                        response,
+                        mdStatus,
+                        errorMessage: errMsg,
+                        errorCode: errCode,
+                        returnOid,
+                        clientIp,
+                        // Success fields
+                        authCode,
+                        transactionDate,
+                        maskedPan,
+                        cardHolderName,
+                        paymentType,
+                        cardBrand,
+                        cardIssuer,
+                        cardExpYear,
+                        cardExpMonth,
+                        hostRefNum,
+                        acqStan,
+                        eci,
+                        txStatus,
                     },
                 };
             } else {
+                // Authentic callback for a failed attempt (ProcReturnCode other than "00",
+                // or missing). CMI expects the acknowledgement "APPROVED" (see CallbackHandler).
                 return {
                     success: false,
-                    status: 'FAILURE',
+                    status: 'DECLINED',
+                    verified: true,
                     message: `Payment failed with return code: ${returnCode}`,
                     errorCode: returnCode,
-                    errorMessage: callbackParams.ErrMsg || callbackParams.errMsg,
+                    errorMessage: errMsg,
                     orderData: {
                         orderId: callbackParams.oid,
                         amount: CallbackVerifier.safeParseAmount(callbackParams.amount),
                         currency: callbackParams.currency,
-                        transactionId:
-                            callbackParams.TransId ||
-                            callbackParams.transId ||
-                            callbackParams.oid,
+                        transactionId,
+                        // Always present
+                        returnCode,
+                        response,
+                        mdStatus,
+                        errorMessage: errMsg,
+                        errorCode: errCode,
+                        returnOid,
+                        clientIp,
                     },
                 };
             }
@@ -127,8 +205,10 @@ export class CallbackVerifier {
             return {
                 success: false,
                 status: 'FAILURE',
-                message: `Error verifying callback: ${error instanceof Error ? error.message : String(error)
-                    }`,
+                verified: false,
+                message: `Error verifying callback: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
             };
         }
     }

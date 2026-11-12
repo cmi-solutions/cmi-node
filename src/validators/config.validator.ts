@@ -46,7 +46,10 @@ export class ConfigValidator extends Validator {
       }
 
       const lowerKey = key.toLowerCase();
-      const mappedKey = this.CONFIG_SCHEMA_MAP[lowerKey];
+      // Own keys only: an inherited name such as "constructor" must not map to anything.
+      const mappedKey = Object.prototype.hasOwnProperty.call(this.CONFIG_SCHEMA_MAP, lowerKey)
+        ? this.CONFIG_SCHEMA_MAP[lowerKey]
+        : undefined;
 
       if (!mappedKey) {
         throw new Error(
@@ -85,19 +88,24 @@ export class ConfigValidator extends Validator {
       }
     }
 
-    if (!this.isNumeric(config.clientId.toString())) {
+    if (!this.isDigits(config.clientId.toString())) {
       throw new Error(`clientId must be numeric: ${config.clientId}`);
     }
 
     if (!this.isValidUrl(config.gatewayUrl) || !this.hasHttpProtocol(config.gatewayUrl)) {
       throw new Error(`Invalid gatewayUrl: ${config.gatewayUrl} or missing http/https protocol`);
     }
+    if (!this.isSecureOrLocalUrl(config.gatewayUrl)) {
+      throw new Error(`gatewayUrl must use https:// (got ${config.gatewayUrl}). Plain http is only allowed for localhost.`);
+    }
 
     // Only validate callbackUrl if provided (it's optional now)
     if (config.callbackUrl) {
-      // TODO : add a warning Log when the user provides a localhost URL
       if (!this.isValidUrl(config.callbackUrl) || !this.hasHttpProtocol(config.callbackUrl)) {
         throw new Error(`Invalid callbackUrl: ${config.callbackUrl} or missing http/https protocol`);
+      }
+      if (!this.isSecureOrLocalUrl(config.callbackUrl)) {
+        throw new Error(`callbackUrl must use https:// (got ${config.callbackUrl}). Plain http is only allowed for localhost.`);
       }
     }
 

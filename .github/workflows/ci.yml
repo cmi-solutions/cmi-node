@@ -2,25 +2,118 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, preprod, develop]
   pull_request:
-    branches: [main, master]
+    branches: [main, preprod, develop]
 
 jobs:
+  # ─────────────────────────────────────────────────────────────
+  # JOB 1 — Validate branch name
+  # Runs on BOTH push and pull_request.
+  # Long-lived protected branches bypass the pattern check.
+  # Allowed prefixes: feat/, fix/, chore/, docs/, refactor/, test/, ci/, release/
+  # ─────────────────────────────────────────────────────────────
+  branch-name:
+    name: Validate Branch Name
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve branch name
+        id: resolve
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BRANCH="${{ github.head_ref }}"
+          else
+            BRANCH="${GITHUB_REF_NAME}"
+          fi
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "Resolved branch: $BRANCH"
+
+      - name: Check branch naming convention
+        run: |
+          BRANCH="${{ steps.resolve.outputs.branch }}"
+
+          PROTECTED="^(main|develop|preprod)$"
+          if [[ "$BRANCH" =~ $PROTECTED ]]; then
+            echo "✓ Protected branch '$BRANCH' — skipping naming check."
+            exit 0
+          fi
+
+          PATTERN="^(feat|fix|chore|docs|refactor|test|ci|release)/[a-z0-9][a-z0-9-]*$"
+
+          if [[ ! "$BRANCH" =~ $PATTERN ]]; then
+            echo "::error::Branch name '$BRANCH' does not follow naming convention."
+            echo "::error::Expected pattern: <type>/<description>"
+            echo "::error::Allowed types: feat, fix, chore, docs, refactor, test, ci, release"
+            echo "::error::Example valid names: feat/add-payment-link, fix/hash-mismatch, chore/update-deps"
+            exit 1
+          fi
+
+          echo "✓ Branch name '$BRANCH' is valid."
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 2 — Validate commit messages
+  # Runs on BOTH push and pull_request.
+  # Enforces commitlint even if Husky is bypassed locally.
+  # ─────────────────────────────────────────────────────────────
+  commit-lint:
+    name: Validate Commit Messages
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code (full history for commit range)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run commitlint (pull_request)
+        if: github.event_name == 'pull_request'
+        run: |
+          npx commitlint \
+            --from ${{ github.event.pull_request.base.sha }} \
+            --to   ${{ github.event.pull_request.head.sha }} \
+            --verbose
+
+      - name: Run commitlint (push — single or range of commits)
+        if: github.event_name == 'push'
+        run: |
+          BEFORE="${{ github.event.before }}"
+          HEAD="${{ github.sha }}"
+
+          if [[ "$BEFORE" == "0000000000000000000000000000000000000000" ]]; then
+            echo "First push to branch — linting HEAD commit only."
+            npx commitlint --from "${HEAD}^" --to "${HEAD}" --verbose
+          else
+            echo "Linting commits from ${BEFORE} to ${HEAD}."
+            npx commitlint --from "${BEFORE}" --to "${HEAD}" --verbose
+          fi
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 3 — Main CI: build, type-check, lint, test
+  # ─────────────────────────────────────────────────────────────
   ci:
     name: Build, Typecheck & Test
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x]
+        node-version: [22.x, 24.x, 26.x]
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
@@ -55,25 +148,53 @@ jobs:
         run: npm test
 
       - name: Coverage report
-        run: npx c8 --check-coverage --lines 85 npx tsx --test test/gateway.test.ts
+        run: npm run test:coverage
 
-      - name: Verify package contents
-        run: npm pack --dry-run 2>&1
+      - name: Verify package contents (no .env, canary or key-like literal in the tarball)
+        run: npm run check:pack
 
-  # Verify the published tarball installs correctly with Yarn
+      - name: Lint the package.json exports (publint) and the published types (attw)
+        run: |
+          npx --yes publint@0.3.25
+          npm pack --pack-destination "$RUNNER_TEMP" > /dev/null
+          npx --yes @arethetypeswrong/cli@0.18.5 "$RUNNER_TEMP"/cmi-node-*.tgz
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB — Secret scan of the full git history (gitleaks)
+  # The Docker image avoids gitleaks-action, which needs a paid
+  # licence for organisation-owned repositories.
+  # ─────────────────────────────────────────────────────────────
+  secrets:
+    name: Secret Scan (gitleaks)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code (full history)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks over every commit
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.3 \
+            git /repo --log-opts="--all" --redact --no-banner --exit-code 1
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 4 — Yarn compatibility (npm + yarn classic + yarn berry)
+  # ─────────────────────────────────────────────────────────────
   yarn-compat:
     name: Yarn Compatibility
     runs-on: ubuntu-latest
-    needs: ci   # only run after the main CI job passes
+    needs: ci
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20.x'
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: Install dependencies & build
@@ -103,3 +224,58 @@ jobs:
           yarn add $GITHUB_WORKSPACE/cmi-node-*.tgz
           yarn node -e "const { CMIPaymentGateway } = require('cmi-node'); console.log('✅ Yarn Berry CJS import OK');"
           yarn node --input-type=module -e "import { CMIPaymentGateway } from 'cmi-node'; console.log('✅ Yarn Berry ESM import OK');"
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 5 — Enforce merge policy (pull_request only)
+  # develop  ← feat/fix/chore/docs/refactor/test/ci/release branches only
+  # preprod  ← develop only
+  # main     ← preprod only
+  # ─────────────────────────────────────────────────────────────
+  merge-policy:
+    name: Enforce Merge Policy
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Check merge direction
+        run: |
+          SOURCE="${{ github.head_ref }}"
+          TARGET="${{ github.base_ref }}"
+
+          echo "PR: '$SOURCE' → '$TARGET'"
+
+          # ── develop: only accepts feature branches ──────────────
+          if [[ "$TARGET" == "develop" ]]; then
+            ALLOWED="^(feat|fix|chore|docs|refactor|test|ci|release)/[a-z0-9][a-z0-9-]*$"
+            if [[ ! "$SOURCE" =~ $ALLOWED ]]; then
+              echo "::error::❌ '$SOURCE' cannot be merged into 'develop'."
+              echo "::error::Only feat/fix/chore/docs/refactor/test/ci/release branches are allowed."
+              exit 1
+            fi
+            echo "✓ '$SOURCE' → 'develop' is allowed."
+            exit 0
+          fi
+
+          # ── preprod: only accepts from develop ──────────────────
+          if [[ "$TARGET" == "preprod" ]]; then
+            if [[ "$SOURCE" != "develop" ]]; then
+              echo "::error::❌ '$SOURCE' cannot be merged into 'preprod'."
+              echo "::error::Only 'develop' can be merged into 'preprod'."
+              exit 1
+            fi
+            echo "✓ 'develop' → 'preprod' is allowed."
+            exit 0
+          fi
+
+          # ── main: only accepts from preprod ─────────────────────
+          if [[ "$TARGET" == "main" ]]; then
+            if [[ "$SOURCE" != "preprod" ]]; then
+              echo "::error::❌ '$SOURCE' cannot be merged into 'main'."
+              echo "::error::Only 'preprod' can be merged into 'main'."
+              exit 1
+            fi
+            echo "✓ 'preprod' → 'main' is allowed."
+            exit 0
+          fi
+
+          echo "✓ No merge policy restriction for target '$TARGET'."
