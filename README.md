@@ -18,7 +18,8 @@ The `cmi-node` package provides a seamless way to integrate the Centre Monétiqu
 - **Secure by Design**: Built-in hash verification (SHA-512) and timing-safe comparisons.
 - **Flexible Callbacks**: Support for both `'auto'` and `'manual'` confirmation modes.
 - **Middleware Helpers**: Pre-built helpers for popular frameworks to get you started in minutes.
-- **No External Runtime Dependencies**: Uses only Node.js built-ins (`crypto`, `buffer`). Requires Node.js ≥ 18.
+- **No External Runtime Dependencies**: Uses only Node.js built-ins (`crypto`, `buffer`). Requires Node.js ≥ 22.12.
+- **Server-only**: Importing the SDK into browser code fails immediately, so the `storeKey` can never be bundled into a web page.
 
 ---
 
@@ -63,6 +64,27 @@ yarn add cmi-node
 
 > **Yarn Berry / PnP:** This package has zero runtime dependencies and correct `exports` maps, so it works out of the box with Yarn Berry's Plug'n'Play resolution. No special configuration is needed.
 
+### Requirements
+
+| | |
+|---|---|
+| Node.js | 22.12 or newer (Node 22, 24 and 26 are tested) |
+| Runtime | Server only: API routes, route handlers, server actions, controllers. Importing `cmi-node` in browser code throws |
+| Edge runtimes | Cloudflare Workers need the `nodejs_compat` compatibility flag (the SDK uses Node's `crypto` and `Buffer`). Vercel, Bun and Deno work as they are |
+| TypeScript | Types included. Subpath types also resolve with `moduleResolution: "node"` (common in NestJS projects) |
+| Frameworks (optional peers) | Express 4.17+ / 5, Fastify 4 / 5, Hono 4, Next.js 14–16, NestJS 10–12 |
+
+### Upgrading from 1.x
+
+Version 2.0 contains breaking changes. The full list is in [CHANGELOG.md](./CHANGELOG.md); the ones most likely to affect you:
+
+- **Node.js 22.12 or newer** is required.
+- **`gatewayUrl` and `callbackUrl` must use `https://`.** Plain `http://` is accepted only for `localhost`, `*.localhost`, `127.0.0.1` and `[::1]`.
+- **`clientId` must contain digits only.**
+- **Amounts with more than 2 decimals are rounded half-up to the cent**, as CMI does (`125.6578` → `125.66`). The old rounding was wrong for some values (`1.005` gave `"1.00"`, now `"1.01"`).
+- **The logger prints only warnings and errors by default** outside production. Use `configureLogger({ level: 'debug' })` to see more.
+- **The Next.js and Hono adapters no longer read callback data from the URL query string** unless `supportGetMethod` is enabled, and then only for GET requests.
+
 ### Subpath Imports (Recommended)
 
 For optimal bundle size, import framework adapters from their dedicated subpath:
@@ -73,7 +95,7 @@ import { CMIPaymentGateway } from 'cmi-node';
 
 // Framework adapters — import only what you need
 import { createExpressMiddleware } from 'cmi-node/express';
-import { createNextJsHandler, handleNextJsCallback } from 'cmi-node/nextjs';
+import { createNextJsHandler, createNextJsAppRouterHandler, handleNextJsCallback } from 'cmi-node/nextjs';
 import { createFastifyHandler } from 'cmi-node/fastify';
 import { createHonoHandler } from 'cmi-node/hono';
 import { NestJSCallbackHandler } from 'cmi-node/nestjs';
@@ -103,12 +125,13 @@ const gateway = new CMIPaymentGateway({
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `storeKey` | `string` | ✅ | Secret key provided by CMI for hash generation |
-| `clientId` | `string` | ✅ | Numeric Client ID provided by CMI |
-| `gatewayUrl` | `string` | ✅ | CMI gateway URL (must use `http://` or `https://`) |
+| `storeKey` | `string` | ✅ | Secret key provided by CMI for hash generation. Read it from a server-side environment variable (see [Handling your storeKey safely](#-handling-your-storekey-safely)) |
+| `clientId` | `string` | ✅ | Client ID provided by CMI (digits only) |
+| `gatewayUrl` | `string` | ✅ | CMI gateway URL. Must use `https://` (plain `http://` only for localhost) |
 | `storetype` | `string` | ✅ | Store type (`3d_pay_hosting`, `3d`, `pay_hosting`, etc.) |
 | `trantype` | `string` | ✅ | Transaction type (case-insensitive: `preauth`, `auth`, `postauth`, `void`, `credit`) |
-| `callbackUrl` | `string` | ❌ | Callback URL for payment notifications. If omitted, payment confirmation will **not** be triggered automatically — the merchant must confirm manually via the CMI Back Office. |
+| `accountType` | `string` | ❌ | `'inshore'` (MAD only, the default) or `'offshore'` (foreign processing currency, no `amountCur` / `symbolCur`) |
+| `callbackUrl` | `string` | ❌ | Callback URL for payment notifications. Must use `https://` (plain `http://` only for localhost). If omitted, payment confirmation will **not** be triggered automatically — the merchant must confirm manually via the CMI Back Office. |
 | `confirmationMode` | `string` | ❌ | `'auto'` (ACTION=POSTAUTH) or `'manual'` (APPROVED). Default: `'manual'`. |
 
 > The SDK strictly validates all configuration fields and rejects unknown or duplicate keys. Only the fields listed above are accepted. Check for typos if you see `"Unknown configuration field detected"`.
@@ -454,11 +477,11 @@ export default createNextJsHandler(gateway, {
 ### 3. Next.js — App Router
 
 ```typescript
-// app/lib/cmi-gateway-config.ts
+// app/lib/cmi-gateway-config.ts  (server-only module)
 
 import { CMIPaymentGateway } from 'cmi-node';
 
-const gateway = new CMIPaymentGateway({
+export const gateway = new CMIPaymentGateway({
   storeKey: process.env.CMI_STORE_KEY!,
   clientId: process.env.CMI_CLIENT_ID!,
   gatewayUrl: 'https://testpayment.cmi.co.ma/fim/est3Dgate',
@@ -469,9 +492,10 @@ const gateway = new CMIPaymentGateway({
 });
 
 // app/api/payment/pay/route.ts
+import { NextRequest, NextResponse } from 'next/server';
 import { gateway } from '../../../lib/cmi-gateway-config';
 
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   try {
 
     const params = gateway.createPaymentParams({
@@ -503,19 +527,26 @@ export async function POST(request: NextRequest) {
 }
 
 // app/api/payment/callback/route.ts
+import { createNextJsAppRouterHandler } from 'cmi-node/nextjs';
 import { gateway } from '../../../lib/cmi-gateway-config';
 
-export async function POST(request: NextRequest) {
-  return handleNextJsCallback(gateway, request, {
-    onSuccess: async (result) => {
-      // Update order ID
-    },
-    onFailure: async (result) => {
-      console.error('Payment failed:', result.message);
-    },
-  });
-}
+// Built once, reused for every callback request
+export const POST = createNextJsAppRouterHandler(gateway, {
+  // Runs before CMI is answered: return false to refuse the payment
+  validateOrder: async (result) => {
+    const order = await db.orders.findOne(result.orderData!.orderId);
+    return !!order && order.status !== 'paid' && order.amount === result.orderData!.amount;
+  },
+  onSuccess: async (result) => {
+    await db.orders.markPaid(result.orderData!.orderId, result.orderData!.transactionId);
+  },
+  onFailure: async (result) => {
+    console.error('Payment failed:', result.message);
+  },
+});
 ```
+
+> `handleNextJsCallback(gateway, request, options)` still works and does the same thing, but builds a new handler on every request.
 
 ---
 
@@ -748,28 +779,31 @@ res.send(form);
 |---|---|---|
 | `nonce` | `string` | CSP nonce applied to inline `<style>` and `<script>` tags |
 
-#### CSP — Using `generateInputs()`
+#### Strict Content-Security-Policy
 
-If your app enforces a strict Content-Security-Policy that blocks `'unsafe-inline'`, use `generateInputs()` to get raw hidden inputs and build your own form:
-
-```typescript
-// gateway.generateInputs() is exposed via the internal FormGenerator
-// Use it when you need custom form submission logic
-
-const inputs = gateway.generatePaymentForm(params); // or use gateway directly:
-
-// Alternatively, build your own form manually:
-const form = gateway.generatePaymentForm(params, { nonce: 'your-csp-nonce' });
-res.send(form);
-```
-
-For full CSP control, use the `CallbackHandler` directly and build your own HTML form with the hidden inputs returned via `generatePaymentForm`:
+The generated page uses an inline `<style>` and `<script>`. If your CSP blocks `'unsafe-inline'`, either pass your nonce:
 
 ```typescript
-// Pass your nonce to avoid 'unsafe-inline'
 const form = gateway.generatePaymentForm(params, { nonce: req.cspNonce });
 res.send(form);
 ```
+
+or build your own form from the escaped hidden inputs returned by `generatePaymentInputs()`:
+
+```typescript
+const inputs = gateway.generatePaymentInputs(params); // string[] of <input type="hidden" ...>
+
+res.send(`
+  <form method="POST" action="https://testpayment.cmi.co.ma/fim/est3Dgate">
+    ${inputs.join('\n')}
+    <button type="submit">Continue to payment</button>
+  </form>
+`);
+```
+
+### `gateway.generatePaymentInputs(params)`
+
+Returns one HTML-escaped `<input type="hidden">` string per payment parameter (including `hash`), for custom forms. The values are exactly the ones `generatePaymentForm()` would post.
 
 ---
 
@@ -883,12 +917,18 @@ res.status(response.status).send(response.body);
 
 | Field | Type | Default | Description |
 |---|---|---|---|
+| `validateOrder` | `(result: CallbackResult) => boolean \| Promise<boolean>` | — | Runs **before** CMI is answered, for authentic approved payments only. Return `false` (or throw) to answer `FAILURE`, so CMI does not capture. Use it to check that the order exists, matches the amount and is not already paid (this is also your replay protection). The SDK warns once if `confirmationMode` is `'auto'` and this is missing |
 | `onSuccess` | `(result: CallbackResult) => void \| Promise<void>` | — | Called when payment is verified successfully |
 | `onFailure` | `(result: CallbackResult) => void \| Promise<void>` | — | Called when payment verification fails |
 | `autoRespond` | `boolean` | `true` | Automatically send the appropriate response string to CMI |
 | `successResponse` | `string` | `"ACTION=POSTAUTH"` or `"APPROVED"` | Custom success response message |
-| `failureResponse` | `string` | `"FAILURE"` | Custom failure response message |
+| `failureResponse` | `string` | `"FAILURE"` | Custom failure response message (also sent with status 500 when handling throws) |
+| `declinedResponse` | `string` | `"APPROVED"` | Answer for an authentic callback of a declined payment (CMI expects an acknowledgement) |
 | `supportGetMethod` | `boolean` | `false` | Accept callback params from GET query strings ⚠️ |
+
+The Express, Fastify, Next.js Pages and NestJS helpers answer CMI first, then run `onSuccess` / `onFailure`, so a slow callback cannot delay CMI's answer. The Hono and Next.js App Router helpers return a `Response`, so they run the callbacks before answering: keep them fast there.
+
+For your own adapter, `handler.evaluate(params)` returns `{ result, response }` without running the callbacks, `handler.notify(result)` runs them, and `handler.errorResponse()` gives the answer to send when something throws.
 
 > ⚠️ **Security Warning:** Enabling `supportGetMethod` causes callback parameters (including `HASH` and payment data) to be read from query strings. Query strings are logged in server access logs, browser history, proxy caches, and CDN logs. Only enable this if your gateway explicitly requires it and your infrastructure does not log query parameters.
 
@@ -908,19 +948,22 @@ A class-based wrapper for NestJS that wraps `CallbackHandler` for use with the D
 
 ## 📋 Logger Configuration
 
-The SDK includes an environment-aware logger. In production (`NODE_ENV=production`), only errors are logged. In development, all levels are shown.
+The SDK includes an environment-aware logger. In production (`NODE_ENV=production`), only errors are logged; elsewhere, warnings and errors. It never logs the `storeKey`, the hash input or customer data.
 
 ```typescript
 import { configureLogger, resetLogger } from 'cmi-node';
 
 // Set log level
-configureLogger({ level: 'error' }); // 'debug' | 'info' | 'warn' | 'error'
+configureLogger({ level: 'debug' }); // 'debug' | 'info' | 'warn' | 'error'
 
 // Disable all logging
 configureLogger({ enabled: false });
 
 // Customize prefix
 configureLogger({ prefix: '[MyApp Payment]' });
+
+// Send log lines to your own logger (pino, winston, console...)
+configureLogger({ sink: pinoLogger }); // any object with debug, info, warn and error methods
 
 // Reset to defaults
 resetLogger();
@@ -1058,11 +1101,17 @@ npm run build
 # Run tests
 npm test
 
-# Run tests with coverage
+# Run tests with coverage (CI enforces 92% lines, 86% branches)
 npm run test:coverage
+
+# Type-check the sources and the tests
+npm run type-check
 
 # Linting
 npm run lint
+
+# Check the npm tarball for secrets (after npm run build)
+npm run check:pack
 
 # Format code
 npm run format
@@ -1085,7 +1134,7 @@ Contributions are welcome! Please read the [CONTRIBUTING.md](./CONTRIBUTING.md) 
 
 - **Branch names** must follow `<type>/<short-description>`:
   ```
-  feature/add-refund
+  feat/add-refund
   fix/callback-bug
   ```
   Allowed types: `feature`, `fix`, `chore`, `docs`, `refactor`, `release`, `ci`, `test`
