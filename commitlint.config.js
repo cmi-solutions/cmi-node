@@ -1,17 +1,26 @@
+// Headers already in the history from before commitlint ran in CI. They cannot be
+// reworded without rewriting shared branches, so they are skipped. Legacy commits only.
+const LEGACY_HEADERS = [
+    'docs: update documentation with comprehensive framework integration examples and define contribution guidelines',
+    'MERGE develop into preprod (#23)',
+    'Docs/dev guide (#16)',
+];
+
 export default {
     extends: ['@commitlint/config-conventional'],
+    ignores: [(message) => LEGACY_HEADERS.includes(message.split('\n', 1)[0].trim())],
     rules: {
         'header-max-length': [2, 'always', 100],
+        // Warn only: squash merges copy every commit body (and its long lines) into one message.
+        'body-max-line-length': [1, 'always', 100],
         'subject-case': [
             2,
             'never',
             ['sentence-case', 'start-case', 'pascal-case', 'upper-case'],
         ],
-        'scope-case': [
-            2,
-            'never',
-            ['start-case', 'camel-case', 'pascal-case', 'sentence-case'],
-        ],
+        // Scopes are lower-case, e.g. feat(core) or fix(callback-handler).
+        // The old "never camel-case" rule rejected every one-word scope such as `core`.
+        'scope-case': [2, 'always', 'lower-case'],
         'type-enum': [
             2,
             'always',
