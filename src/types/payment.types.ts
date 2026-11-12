@@ -75,5 +75,46 @@ export interface PaymentRequest {
   /** @deprecated Use `tel` instead. This field will throw at runtime. */
   phone?: never;
 
+  /** Custom fields (e.g. id1, qty1, price1) are sent to CMI and included in the hash. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- kept `any` so existing callers keep compiling
   [key: string]: any;
+}
+
+/** A value in the parameters posted to CMI. */
+export type PaymentParamValue = string | number | boolean;
+
+/**
+ * Parameters returned by `createPaymentParams()`: exactly what is posted to CMI,
+ * including the computed `hash`. Custom fields from the request are included as strings.
+ */
+export interface PaymentParams {
+  oid: string;
+  rnd: string;
+  clientId: string;
+  trantype: string;
+  amount: string;
+  currency: string;
+  storetype: string;
+  email: string;
+  BillToName: string;
+  lang: string;
+  okUrl: string;
+  failUrl: string;
+  shopUrl: string;
+  hashAlgorithm: string;
+  encoding: string;
+  AutoRedirect: string;
+  hash: string;
+  callbackUrl?: string;
+  amountCur?: string;
+  symbolCur?: string;
+  redirectGet?: boolean;
+  CallbackResponse?: boolean;
+  sessiontimeout?: number;
+  /**
+   * Custom fields. Typed `any` (not PaymentParamValue) so existing code that reads them
+   * as strings, or assigns the params to Record<string, string>, keeps compiling.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [field: string]: any;
 }

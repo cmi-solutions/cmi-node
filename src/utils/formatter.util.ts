@@ -2,39 +2,51 @@ import { normalizeCurrency, normalizeCurrencyCode } from "@constants/currencies"
 
 export class FormatterUtil {
   /**
-   * Format and validate amount for CMI gateway
-   * 
+   * Format an amount for the CMI gateway, with exactly 2 decimals.
+   *
+   * Any number of decimals is accepted. Amounts with more than 2 decimals are
+   * rounded half-up to the cent, the way CMI's gateway does it
+   * ("125.6578" -> "125.66", "125.3333" -> "125.33", "1.005" -> "1.01").
+   * The rounding works on the decimal digits, never on a binary float, so
+   * Number.toFixed() errors (1.005 -> "1.00") cannot happen. The rounded value
+   * is the one posted to CMI and hashed, so the charged amount is known exactly.
+   *
    * @param amount - The amount as number or string
-   * @returns Properly formatted amount string (e.g., "220.00")
-   * @throws Error if amount contains non-numeric characters
+   * @returns Formatted amount string (e.g., "220.00")
+   * @throws Error if amount is not a plain decimal number
    */
   static formatAmount(amount: number | string): string {
-    // If number, format directly
+    let text: string;
     if (typeof amount === 'number') {
       if (isNaN(amount) || !isFinite(amount)) {
         throw new Error('Amount must be a valid finite number');
       }
-      return amount.toFixed(2);
+      // String() gives the shortest decimal that round-trips to this number:
+      // 1.005 -> "1.005", 19.99 * 3 -> "59.97000000000001".
+      text = String(amount);
+    } else {
+      text = String(amount).trim();
     }
 
-    // Handle string input
-    const trimmedAmount = amount.trim();
-
-    // Check for invalid characters (only allow digits, decimal point, and optional leading minus)
-    if (!/^-?\d*\.?\d+$/.test(trimmedAmount)) {
+    const match = /^(-?)(\d*)(?:\.(\d+))?$/.exec(text);
+    if (!match || (match[2] === '' && match[3] === undefined)) {
       throw new Error(
         `Invalid amount format: "${amount}". Amount must contain only numeric characters (e.g., "220" or "220.50")`
       );
     }
 
-    // Parse and format - this handles leading zeros like "0220" -> 220.00
-    const parsedAmount = parseFloat(trimmedAmount);
+    const [, sign, integerDigits, fractionDigits = ''] = match;
 
-    if (isNaN(parsedAmount) || !isFinite(parsedAmount)) {
-      throw new Error(`Invalid amount: "${amount}". Could not parse as a valid number.`);
+    // Whole cents as a BigInt, so very long inputs stay exact.
+    let cents = BigInt((integerDigits || '0') + fractionDigits.slice(0, 2).padEnd(2, '0'));
+    if (fractionDigits.length > 2 && fractionDigits.charCodeAt(2) >= 0x35 /* '5' */) {
+      cents += 1n; // half-up (away from zero)
     }
 
-    return parsedAmount.toFixed(2);
+    const whole = (cents / 100n).toString();
+    const fraction = (cents % 100n).toString().padStart(2, '0');
+    const negative = sign === '-' && cents !== 0n;
+    return `${negative ? '-' : ''}${whole}.${fraction}`;
   }
 
   static formatAutoRedirect(autoRedirect: boolean | undefined): string {
@@ -52,11 +64,6 @@ export class FormatterUtil {
 
   static formatCurrencyNumeric(currencyNumeric: string): string {
     return normalizeCurrency(currencyNumeric) || "";
-  }
-
-  static formatLanguage(lang: string | undefined): string {
-    if (!lang) return "fr";
-    return lang.toLowerCase();
   }
 }
 

@@ -19,10 +19,14 @@ export interface CallbackVerifierConfig {
  * Verifies and processes callbacks from CMI gateway
  */
 export class CallbackVerifier {
-    private readonly config: CallbackVerifierConfig;
+    private readonly config: Omit<CallbackVerifierConfig, 'storeKey'>;
+    // ES private field: not reachable from outside the class at runtime.
+    readonly #storeKey: string | SecretString;
 
     constructor(config: CallbackVerifierConfig) {
-        this.config = config;
+        const { storeKey, ...rest } = config;
+        this.#storeKey = storeKey;
+        this.config = rest;
     }
 
     /**
@@ -67,27 +71,21 @@ export class CallbackVerifier {
                 return {
                     success: false,
                     status: 'FAILURE',
+                    verified: false,
                     message: 'Hash not found in callback',
                 };
             }
 
-            // Prepare params for hash verification (remove hash and encoding, case-insensitively)
-            const paramsForHash: Record<string, any> = {};
-            for (const [key, value] of Object.entries(callbackParams)) {
-                const lowerKey = key.toLowerCase();
-                if (lowerKey !== 'hash' && lowerKey !== 'encoding') {
-                    paramsForHash[key] = value;
-                }
-            }
-
-            // Recalculate hash (HASH #2 - Verify)
-            const calculatedHash = HashUtil.generate(paramsForHash, this.config.storeKey);
+            // Recalculate the hash over every received field, exactly as CMI's
+            // callback.php does (hash and encoding are skipped inside HashUtil).
+            const calculatedHash = HashUtil.generateForCallback(callbackParams, this.#storeKey);
 
             // Verify hash using constant-time comparison (prevents timing attacks)
-            if (!timingSafeCompare(receivedHash, calculatedHash)) {
+            if (!timingSafeCompare(String(receivedHash), calculatedHash)) {
                 return {
                     success: false,
                     status: 'FAILURE',
+                    verified: false,
                     message: 'Hash verification failed - possible tampering',
                 };
             }
@@ -145,6 +143,7 @@ export class CallbackVerifier {
                 return {
                     success: true,
                     status: confirmationResponse,
+                    verified: true,
                     message: 'Payment successful',
                     orderData: {
                         orderId: callbackParams.oid,
@@ -176,9 +175,12 @@ export class CallbackVerifier {
                     },
                 };
             } else {
+                // Authentic callback for a failed attempt (ProcReturnCode other than "00",
+                // or missing). CMI expects the acknowledgement "APPROVED" (see CallbackHandler).
                 return {
                     success: false,
-                    status: 'FAILURE',
+                    status: 'DECLINED',
+                    verified: true,
                     message: `Payment failed with return code: ${returnCode}`,
                     errorCode: returnCode,
                     errorMessage: errMsg,
@@ -203,6 +205,7 @@ export class CallbackVerifier {
             return {
                 success: false,
                 status: 'FAILURE',
+                verified: false,
                 message: `Error verifying callback: ${
                     error instanceof Error ? error.message : String(error)
                 }`,

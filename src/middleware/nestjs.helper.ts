@@ -64,14 +64,19 @@ export class NestJSCallbackHandler {
      * @param res - Response object from @Res() decorator
      */
     async handle(body: any, res: any): Promise<any> {
+        let sent: unknown;
         try {
-            const result = await this.handler.handle(body);
-            const response = this.handler.getResponse(result);
+            const { result, response } = await this.handler.evaluate(body ?? {});
 
-            return res.status(response.status).send(response.body);
+            // Answer CMI first, then run onSuccess / onFailure.
+            sent = res.status(response.status).send(response.body);
+            await this.handler.notify(result);
+            return sent;
         } catch (error) {
             logger.error('NestJS callback handler error:', error);
-            return res.status(500).send('FAILURE');
+            if (sent !== undefined) return sent;
+            const answer = this.handler.errorResponse();
+            return res.status(answer.status).send(answer.body);
         }
     }
 

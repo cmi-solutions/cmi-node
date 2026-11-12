@@ -51,10 +51,17 @@ export class PaymentValidator extends Validator {
     const normalized: Record<string, any> = {};
 
     for (const [key, value] of Object.entries(raw)) {
+      // A "__proto__" own property (e.g. from JSON.parse) would replace the
+      // prototype of the normalized object instead of becoming a field.
+      if (key === '__proto__') {
+        throw new Error('Invalid field name "__proto__" in payment request.');
+      }
       const lowerKey = key.toLowerCase();
-      const canonicalKey = this.PAYMENT_REQUEST_SCHEMA_MAP[lowerKey] ?? key; // keep custom fields as-is
+      const canonicalKey = Object.prototype.hasOwnProperty.call(this.PAYMENT_REQUEST_SCHEMA_MAP, lowerKey)
+        ? this.PAYMENT_REQUEST_SCHEMA_MAP[lowerKey]
+        : key; // keep custom fields as-is
 
-      if (canonicalKey in normalized) {
+      if (Object.prototype.hasOwnProperty.call(normalized, canonicalKey)) {
         throw new Error(
           `Duplicate field detected: "${key}" maps to the same field as a previously provided key ("${canonicalKey}"). ` +
           `Ensure each field is provided only once.`
@@ -126,11 +133,6 @@ export class PaymentValidator extends Validator {
       throw new Error("BillToName cannot exceed 255 characters");
     }
 
-    if (this.hasSpecialCharacters(request.BillToName)) {
-      throw new Error(
-        "BillToName contains special characters or consecutive spaces which are not allowed"
-      );
-    }
 
     if (!request.currency || !isSupportedCurrency(request.currency)) {
       throw new Error(
@@ -299,11 +301,6 @@ export class PaymentValidator extends Validator {
         }
         if (value.length > field.maxLen) {
           throw new Error(`${field.label} cannot exceed ${field.maxLen} characters`);
-        }
-        if (this.hasSpecialCharacters(value)) {
-          throw new Error(
-            `${field.label} contains special characters or consecutive spaces which are not allowed`
-          );
         }
       }
     }

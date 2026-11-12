@@ -21,13 +21,3 @@ export function isSupportedTranType(type: string): boolean {
     return SUPPORTED_TRAN_TYPES.includes(type.toLowerCase() as TranType);
 }
 
-/**
- * Normalize transaction type to the canonical format (lowercase)
- */
-export function normalizeTranType(type: string): TranType {
-    const normalized = type.toLowerCase() as TranType;
-    if (!SUPPORTED_TRAN_TYPES.includes(normalized)) {
-        throw new Error(`Unsupported transaction type: ${type}. Supported types: ${SUPPORTED_TRAN_TYPES.join(', ')}`);
-    }
-    return normalized;
-}

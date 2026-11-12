@@ -6,23 +6,6 @@
  */
 
 /**
- * Billing address fields
- */
-export const BILLING_FIELDS = [
-    'BillToName',
-    'BillToCompany',
-    'BillToStreet1',
-    'BillToStreet2',
-    'BillToStreet3',
-    'BillToCity',
-    'BillToStateProv',
-    'BillToPostalCode',
-    'BillToCountry',
-] as const;
-
-export type BillingField = typeof BILLING_FIELDS[number];
-
-/**
  * Optional payment request fields (billing + tel)
  */
 export const OPTIONAL_PAYMENT_FIELDS = [
@@ -71,19 +54,13 @@ export const STANDARD_PAYMENT_FIELDS = [
 export type StandardPaymentField = typeof STANDARD_PAYMENT_FIELDS[number];
 
 /**
- * Fields to exclude from hash calculation
+ * Billing fields that CMI's reference 2.SendData.php cleans with str_without_accents()
+ * (accents removed, only a-z A-Z 0-9 _ space - kept) before sending and hashing.
  */
-export const HASH_EXCLUDED_FIELDS = ['hash', 'HASH', 'encoding'] as const;
-
-/**
- * Fields requiring special sanitization in hash generation
- */
-export const HASH_SANITIZE_FIELDS = [
+export const PHP_CLEANED_BILLING_FIELDS = [
     'BillToName',
     'BillToCompany',
     'BillToStreet1',
-    'BillToStreet2',
-    'BillToStreet3',
     'BillToCity',
     'BillToStateProv',
     'BillToPostalCode',
