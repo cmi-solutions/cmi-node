@@ -47,6 +47,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Build and check the tarball for secrets
+        run: npm run build && npm run check:pack
+
       - name: Publish (with provenance)
         run: npm publish --provenance --access public
         env:

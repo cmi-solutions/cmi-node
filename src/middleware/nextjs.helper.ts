@@ -28,7 +28,7 @@ import { logger } from "@logger";
  * 
  * export default createNextJsHandler(gateway, {
  *   onSuccess: async (result) => {
- *     console.log('Payment successful:', result.orderData);
+ *     console.log('Payment successful for order', result.orderData?.orderId); // avoid logging card data
  *     // Update database
  *     await prisma.order.update({
  *       where: { id: result.orderData.orderId },

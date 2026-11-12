@@ -31,10 +31,15 @@ export interface PaymentBuilderConfig {
  * Builds payment parameters for CMI gateway submission
  */
 export class PaymentBuilder {
-    private readonly config: PaymentBuilderConfig;
+    private readonly config: Omit<PaymentBuilderConfig, 'storeKey'>;
+    // ES private field: not reachable from outside the class at runtime,
+    // unlike TypeScript's `private` (which `(builder as any).config` bypasses).
+    readonly #storeKey: string | SecretString;
 
     constructor(config: PaymentBuilderConfig) {
-        this.config = config;
+        const { storeKey, ...rest } = config;
+        this.#storeKey = storeKey;
+        this.config = rest;
     }
 
     /**
@@ -150,7 +155,7 @@ export class PaymentBuilder {
         PaymentValidator.validateFinalParams(params);
 
         // Generate hash (HASH #1 - Outgoing)
-        params.hash = HashUtil.generate(params, this.config.storeKey);
+        params.hash = HashUtil.generate(params, this.#storeKey);
 
         return params;
     }

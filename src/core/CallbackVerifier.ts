@@ -19,10 +19,14 @@ export interface CallbackVerifierConfig {
  * Verifies and processes callbacks from CMI gateway
  */
 export class CallbackVerifier {
-    private readonly config: CallbackVerifierConfig;
+    private readonly config: Omit<CallbackVerifierConfig, 'storeKey'>;
+    // ES private field: not reachable from outside the class at runtime.
+    readonly #storeKey: string | SecretString;
 
     constructor(config: CallbackVerifierConfig) {
-        this.config = config;
+        const { storeKey, ...rest } = config;
+        this.#storeKey = storeKey;
+        this.config = rest;
     }
 
     /**
@@ -74,7 +78,7 @@ export class CallbackVerifier {
 
             // Recalculate the hash over every received field, exactly as CMI's
             // callback.php does (hash and encoding are skipped inside HashUtil).
-            const calculatedHash = HashUtil.generateForCallback(callbackParams, this.config.storeKey);
+            const calculatedHash = HashUtil.generateForCallback(callbackParams, this.#storeKey);
 
             // Verify hash using constant-time comparison (prevents timing attacks)
             if (!timingSafeCompare(String(receivedHash), calculatedHash)) {

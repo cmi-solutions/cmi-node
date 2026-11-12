@@ -34,7 +34,7 @@ export class FormGenerator {
    * @param options Optional configuration (nonce for CSP support)
    * @returns HTML form string ready to send to browser
    */
-  generate(params: Record<string, any>, options?: { nonce?: string }): string {
+  generate(params: Readonly<Record<string, unknown>>, options?: { nonce?: string }): string {
     const escapedGatewayUrl = SanitizationUtil.escapeHtml(this.gatewayUrl);
 
     const formInputs = Object.entries(params)
@@ -254,7 +254,7 @@ export class FormGenerator {
    * @param params Payment parameters
    * @returns Array of input HTML strings
    */
-  generateInputs(params: Record<string, any>): string[] {
+  generateInputs(params: Readonly<Record<string, unknown>>): string[] {
     return Object.entries(params).map(([key, value]) => {
       const escapedKey = SanitizationUtil.escapeHtml(key);
       const escapedValue = SanitizationUtil.escapeHtml(String(value));

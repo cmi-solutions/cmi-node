@@ -12,6 +12,8 @@ export {
 export type {
   PaymentConfig,
   PaymentRequest,
+  PaymentParams,
+  PaymentParamValue,
   CallbackResult,
   CallbackHandlerOptions,
   ConfirmationMode,

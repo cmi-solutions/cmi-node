@@ -150,8 +150,34 @@ jobs:
       - name: Coverage report
         run: npm run test:coverage
 
-      - name: Verify package contents
-        run: npm pack --dry-run 2>&1
+      - name: Verify package contents (no .env, canary or key-like literal in the tarball)
+        run: npm run check:pack
+
+      - name: Lint the package.json exports (publint) and the published types (attw)
+        run: |
+          npx --yes publint@0.3.25
+          npm pack --pack-destination "$RUNNER_TEMP" > /dev/null
+          npx --yes @arethetypeswrong/cli@0.18.5 "$RUNNER_TEMP"/cmi-node-*.tgz
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB — Secret scan of the full git history (gitleaks)
+  # The Docker image avoids gitleaks-action, which needs a paid
+  # licence for organisation-owned repositories.
+  # ─────────────────────────────────────────────────────────────
+  secrets:
+    name: Secret Scan (gitleaks)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code (full history)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks over every commit
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.3 \
+            git /repo --log-opts="--all" --redact --no-banner --exit-code 1
 
   # ─────────────────────────────────────────────────────────────
   # JOB 4 — Yarn compatibility (npm + yarn classic + yarn berry)

@@ -146,8 +146,8 @@ export class CallbackHandler {
    * (the order exists and its amount matches). A rejected or failing check turns
    * the result into a FAILURE, so CMI does not capture the payment.
    */
-  private async verifyAndValidate(params: any): Promise<CallbackResult> {
-    const result: CallbackResult = this.gateway.verifyCallback(params);
+  private async verifyAndValidate(params: unknown): Promise<CallbackResult> {
+    const result: CallbackResult = this.gateway.verifyCallback(params as Record<string, unknown>);
     if (!result.success) {
       return result;
     }
@@ -189,7 +189,7 @@ export class CallbackHandler {
    * `onSuccess` / `onFailure`. Adapters send `response` first, then call
    * {@link notify}, so a slow consumer callback cannot delay CMI's answer.
    */
-  async evaluate(params: any): Promise<{ result: CallbackResult; response: CallbackAnswer }> {
+  async evaluate(params: unknown): Promise<{ result: CallbackResult; response: CallbackAnswer }> {
     const result = await this.verifyAndValidate(params);
     return { result, response: this.getResponse(result) };
   }
@@ -216,7 +216,7 @@ export class CallbackHandler {
    * `onSuccess` / `onFailure` run before this resolves. Consumer errors are
    * caught and logged, so they do not prevent the result from being returned.
    */
-  async handle(params: any): Promise<CallbackResult> {
+  async handle(params: unknown): Promise<CallbackResult> {
     const { result } = await this.evaluate(params);
     await this.notify(result);
     return result;

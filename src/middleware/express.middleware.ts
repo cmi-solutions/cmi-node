@@ -30,7 +30,7 @@ import { CallbackHandlerOptions } from "@types";
  * // SDK-managed callback handling
  * app.post('/payment/callback', createExpressMiddleware(gateway, {
  *   onSuccess: async (result) => {
- *     console.log('Payment successful:', result.orderData);
+ *     console.log('Payment successful for order', result.orderData?.orderId); // avoid logging card data
  *     // Update your database
  *     await db.orders.update(result.orderData.orderId, { status: 'paid' });
  *   },

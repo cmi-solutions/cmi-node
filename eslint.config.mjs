@@ -15,6 +15,13 @@ export default defineConfig(
             ],
             '@typescript-eslint/no-explicit-any': 'warn',
             '@typescript-eslint/no-non-null-assertion': 'warn',
+            // All output goes through src/logger, which callers can silence or redirect.
+            // A direct console call can leak payment data or secrets past that control.
+            'no-console': 'error',
         },
+    },
+    {
+        files: ['src/logger/**/*.ts'],
+        rules: { 'no-console': 'off' },
     },
 );

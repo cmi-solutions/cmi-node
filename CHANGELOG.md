@@ -28,6 +28,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `configureLogger({ sink })` to send log lines to your own logger; `LogSink` type.
 - A one-time warning when `confirmationMode: 'auto'` runs without `validateOrder`.
 - `SECURITY.md` and Dependabot configuration.
+- Server-only guard: importing the SDK into browser code fails at once (a `browser`
+  export condition resolves to a module that throws), and the constructor refuses to run
+  where `window` and `document` exist. Cloudflare Workers (`workerd`, `worker`) keep the
+  real build.
+- A one-time warning when the storeKey is shorter than 16 characters.
+- `PaymentParams` and `PaymentParamValue` types: `createPaymentParams()` now returns
+  `PaymentParams` (known fields typed, custom fields still `any`, so existing code compiles).
+- Regression guards: storeKey canary tests, `npm run check:pack` (tarball secret scan) in CI
+  and before publishing, gitleaks in CI and as a pre-commit hook, and `no-console` in `src/`.
+
+### Security
+- The storeKey is held in ES private fields (`#storeKey`) in the gateway, the payment
+  builder and the callback verifier. Before, TypeScript-only `private` properties made it
+  readable at runtime with `(gateway as any).secureStoreKey.getValue()`.
+- `SecretString.equals()` compares fixed-length digests, so it no longer returns early on
+  a length mismatch.
+- README: new "Handling your storeKey safely" section; JSDoc examples log the order id
+  instead of the full callback data.
 
 ### Fixed
 - Amounts with more than 2 decimals are rounded half-up to the cent on their decimal
@@ -48,6 +66,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tests are type-checked (`npm run type-check`), and CI enforces coverage
   (92% lines, 86% branches) on Node 22, 24 and 26.
 - GitHub Actions are pinned to commit SHAs.
+- Published source maps no longer embed the sources (`sourcesContent`), which roughly
+  halves the package size. File and line mappings are kept.
+- `generatePaymentForm()`, `generatePaymentInputs()`, `verifyCallback()` and
+  `CallbackHandler.handle()` / `evaluate()` accept `unknown` values instead of `any`.
 
 ## [1.0.0] - 2026-04-06
 

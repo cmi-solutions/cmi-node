@@ -98,7 +98,7 @@ export function createHonoHandler(
  * registerHonoCallback(app, gateway, {
  *   path: '/cmi/callback',
  *   onSuccess: async (result) => {
- *     console.log('Payment successful:', result.orderData);
+ *     console.log('Payment successful for order', result.orderData?.orderId); // avoid logging card data
  *   }
  * });
  * 
