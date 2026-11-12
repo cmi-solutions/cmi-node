@@ -30,12 +30,20 @@ jobs:
           echo "Resolved branch: $BRANCH"
 
       - name: Check branch naming convention
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           BRANCH="${{ steps.resolve.outputs.branch }}"
 
           PROTECTED="^(main|develop|preprod)$"
           if [[ "$BRANCH" =~ $PROTECTED ]]; then
             echo "✓ Protected branch '$BRANCH' — skipping naming check."
+            exit 0
+          fi
+
+          # Dependabot names its own branches (dependabot/<ecosystem>/<package>-<version>).
+          if [[ "$PR_AUTHOR" == "dependabot[bot]" && "$BRANCH" == dependabot/* ]]; then
+            echo "✓ Dependabot branch '$BRANCH' — skipping naming check."
             exit 0
           fi
 
@@ -238,6 +246,8 @@ jobs:
 
     steps:
       - name: Check merge direction
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           SOURCE="${{ github.head_ref }}"
           TARGET="${{ github.base_ref }}"
@@ -245,6 +255,11 @@ jobs:
           echo "PR: '$SOURCE' → '$TARGET'"
 
           # ── develop: only accepts feature branches ──────────────
+          # Dependabot updates also land here, then follow develop → preprod → main.
+          if [[ "$TARGET" == "develop" && "$PR_AUTHOR" == "dependabot[bot]" && "$SOURCE" == dependabot/* ]]; then
+            echo "✓ Dependabot '$SOURCE' → 'develop' is allowed."
+            exit 0
+          fi
           if [[ "$TARGET" == "develop" ]]; then
             ALLOWED="^(feat|fix|chore|docs|refactor|test|ci|release)/[a-z0-9][a-z0-9-]*$"
             if [[ ! "$SOURCE" =~ $ALLOWED ]]; then
