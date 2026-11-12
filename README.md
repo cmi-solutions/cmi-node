@@ -84,6 +84,8 @@ Version 2.0 contains breaking changes. The full list is in [CHANGELOG.md](./CHAN
 - **Amounts with more than 2 decimals are rounded half-up to the cent**, as CMI does (`125.6578` → `125.66`). The old rounding was wrong for some values (`1.005` gave `"1.00"`, now `"1.01"`).
 - **The logger prints only warnings and errors by default** outside production. Use `configureLogger({ level: 'debug' })` to see more.
 - **The Next.js and Hono adapters no longer read callback data from the URL query string** unless `supportGetMethod` is enabled, and then only for GET requests.
+- **Declined payments have their own status.** An authentic callback for a declined payment now returns `status: 'DECLINED'` with `verified: true` (it used to be `'FAILURE'`), and CMI is answered `APPROVED` as an acknowledgement, like CMI's reference `callback.php`. `'FAILURE'` now means a forged or invalid callback, or an order refused by `validateOrder`. See [`verifyCallback`](#gatewayverifycallbackcallbackparams).
+- **The logger `sink` receives one string per call** (prefix, level, time, message and error stack), so pino and winston keep the whole message.
 
 ### Subpath Imports (Recommended)
 
@@ -875,16 +877,34 @@ Verifies a raw callback from the CMI gateway using a timing-safe SHA-512 hash co
 ```typescript
 const result = gateway.verifyCallback(req.body);
 if (result.success) {
-  // Payment is authentic — safe to update your database
+  // Authentic, approved payment — check the order (amount, not already paid), then record it
+} else if (result.verified) {
+  // Authentic callback for a declined payment (status 'DECLINED'): mark the attempt as failed
+} else {
+  // Forged, altered or unsigned callback (status 'FAILURE'): ignore it
 }
 ```
+
+The three kinds of callback, and what the SDK answers CMI:
+
+| Callback | `success` | `verified` | `status` | Answer sent to CMI |
+|---|---|---|---|---|
+| Authentic, approved payment (`ProcReturnCode` `00`) | `true` | `true` | `'ACTION=POSTAUTH'` (`auto`) or `'APPROVED'` (`manual`) | the same as `status` |
+| Authentic, declined payment (any other `ProcReturnCode`) | `false` | `true` | `'DECLINED'` | `APPROVED`, an acknowledgement as in CMI's reference `callback.php` (change it with `declinedResponse`) |
+| Missing or wrong `HASH`, or a technical error | `false` | `false` | `'FAILURE'` | `FAILURE` |
+| Approved payment refused by your `validateOrder` | `false` | `true` | `'FAILURE'` | `FAILURE` (CMI does not capture) |
+
+`onFailure` runs for the last three rows: use `result.verified` to tell a real decline from a forged callback.
 
 #### `CallbackResult`
 
 ```typescript
 interface CallbackResult {
+  /** True only for an authentic, approved payment (ProcReturnCode "00"). */
   success: boolean;
-  status: 'ACTION=POSTAUTH' | 'APPROVED' | 'FAILURE';
+  status: 'ACTION=POSTAUTH' | 'APPROVED' | 'DECLINED' | 'FAILURE';
+  /** True when the HASH matched, i.e. the data really comes from CMI. */
+  verified: boolean;
   message: string;
   orderData?: {
     // ── Core fields ───────────────────────────────────────────────
@@ -1024,7 +1044,9 @@ configureLogger({ enabled: false });
 configureLogger({ prefix: '[MyApp Payment]' });
 
 // Send log lines to your own logger (pino, winston, console...)
-configureLogger({ sink: pinoLogger }); // any object with debug, info, warn and error methods
+// Any object with debug, info, warn and error methods. Each call receives ONE string:
+// prefix, level, time, message and, for an error, its stack.
+configureLogger({ sink: pinoLogger });
 
 // Reset to defaults
 resetLogger();
