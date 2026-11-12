@@ -67,7 +67,9 @@ export class CMIPaymentGateway {
    * @throws Error if config validation fails
    */
   constructor(
-    config: PaymentConfig & { confirmationMode?: ConfirmationMode | string },
+    // confirmationMode also accepts a plain string (e.g. from an env variable); it is
+    // validated case-insensitively below.
+    config: Omit<PaymentConfig, 'confirmationMode'> & { confirmationMode?: ConfirmationMode | string },
     options: CMIPaymentGatewayOptions = {}
   ) {
     assertServerRuntime();
@@ -301,8 +303,9 @@ export class CMIPaymentGateway {
    * @returns Configuration object without sensitive data
    */
   getConfig(): Omit<PaymentConfig, 'storeKey'> {
-    // storeKey was never stored in this.config — return as-is.
-    return this.config;
+    // storeKey was never stored in this.config. Return a copy, so changing the result
+    // cannot change the gateway (e.g. confirmationMode is fixed in the verifier).
+    return { ...this.config };
   }
 
 

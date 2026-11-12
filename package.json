@@ -25,7 +25,10 @@
     }
   },
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/browser.js",
+    "./dist/browser.cjs"
+  ],
   "exports": {
     ".": {
       "workerd": {

@@ -153,12 +153,17 @@ export class CallbackHandler {
     }
 
     if (!this.options.validateOrder) {
-      if (!this.warnedNoValidateOrder && this.gateway.getConfirmationMode() === 'auto') {
+      if (!this.warnedNoValidateOrder) {
         this.warnedNoValidateOrder = true;
+        // Both modes need the check: in 'auto' CMI captures at once; in 'manual' the
+        // payment is approved and onSuccess runs for every replay of the same callback.
+        const effect = this.gateway.getConfirmationMode() === 'auto'
+          ? 'Payments are captured'
+          : 'Payments are approved (and onSuccess runs for every replayed callback)';
         logger.warn(
-          "CallbackHandler: confirmationMode is 'auto' but no validateOrder was given. " +
-          "Payments are captured without checking that the order exists, matches the amount " +
-          "and was not already paid. Pass validateOrder to check the order before CMI captures it."
+          `CallbackHandler: confirmationMode is '${this.gateway.getConfirmationMode()}' but no validateOrder was given. ` +
+          `${effect} without checking that the order exists, matches the amount ` +
+          "and was not already paid. Pass validateOrder to check the order before CMI is answered."
         );
       }
       return result;
