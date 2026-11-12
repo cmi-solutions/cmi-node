@@ -1116,29 +1116,3 @@ npm run check:pack
 # Format code
 npm run format
 ```
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please read the [CONTRIBUTING.md](./CONTRIBUTING.md) before submitting a pull request.
-
-**Quick rules:**
-
-- **Commit messages** must follow [Conventional Commits](https://www.conventionalcommits.org/):
-  ```
-  feat: add offline mode support
-  fix(core): resolve hash mismatch on callback
-  ```
-  Allowed types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`
-
-- **Branch names** must follow `<type>/<short-description>`:
-  ```
-  feat/add-refund
-  fix/callback-bug
-  ```
-  Allowed types: `feature`, `fix`, `chore`, `docs`, `refactor`, `release`, `ci`, `test`
-
-- All commits, pushes, and PRs are validated automatically via Git hooks and CI.
-
----
