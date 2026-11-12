@@ -16,6 +16,9 @@ export default {
         'header-max-length': [2, 'always', 100],
         // Warn only: squash merges copy every commit body (and its long lines) into one message.
         'body-max-line-length': [1, 'always', 100],
+        // Same for the footer: after a copied "BREAKING CHANGE:" note, commitlint reads the
+        // rest of a squash message as footer, including long "* fix: ..." lines.
+        'footer-max-line-length': [1, 'always', 100],
         'subject-case': [
             2,
             'never',
