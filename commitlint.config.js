@@ -1,9 +1,12 @@
-// Headers already in the history from before commitlint ran in CI. They cannot be
-// reworded without rewriting shared branches, so they are skipped. Legacy commits only.
+// Headers already in the shared history that break a rule. They cannot be reworded
+// without rewriting shared branches, so they are skipped. Add nothing else here.
+// Tip: GitHub's squash merge appends " (#NN)" to the PR title, so keep PR titles
+// under 94 characters.
 const LEGACY_HEADERS = [
     'docs: update documentation with comprehensive framework integration examples and define contribution guidelines',
     'MERGE develop into preprod (#23)',
     'Docs/dev guide (#16)',
+    'fix: config type, manual-mode warning, browser guard in bundles, logger sink, declined-payment docs (#37)',
 ];
 
 export default {
