@@ -24,6 +24,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 
 import { CMIPaymentGateway } from '../src/core/CMIPaymentGateway.js';
+import type { PaymentConfig } from '../src/types/index.js';
 import { CallbackHandler } from '../src/core/CallbackHandler.js';
 import { SecretString } from '../src/utils/secret-string.util.js';
 import { HashUtil } from '../src/utils/hash.util.js';
@@ -135,6 +136,16 @@ describe('CMIPaymentGateway - Constructor', () => {
         const cfg = gw.getConfig();
         assert.ok(!('storeKey' in cfg));
         assert.strictEqual(cfg.clientId, '600000123');
+    });
+
+    it('PaymentConfig types confirmationMode, and getConfig() returns a copy', () => {
+        const config: PaymentConfig = { ...validConfig, confirmationMode: 'auto' };
+        const gw = new CMIPaymentGateway(config);
+        const cfg = gw.getConfig();
+        assert.strictEqual(cfg.confirmationMode, 'auto');
+        cfg.confirmationMode = 'manual';
+        assert.strictEqual(gw.getConfirmationMode(), 'auto');
+        assert.strictEqual(gw.getConfig().confirmationMode, 'auto');
     });
 
     it('should default to manual confirmation mode', () => {
