@@ -23,43 +23,45 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "baseUrl": "./",
+    "types": [
+      "node"
+    ],
     "paths": {
       "@types": [
-        "src/types"
+        "./src/types"
       ],
       "@types/*": [
-        "src/types/*"
+        "./src/types/*"
       ],
       "@utils": [
-        "src/utils"
+        "./src/utils"
       ],
       "@utils/*": [
-        "src/utils/*"
+        "./src/utils/*"
       ],
       "@validators": [
-        "src/validators"
+        "./src/validators"
       ],
       "@validators/*": [
-        "src/validators/*"
+        "./src/validators/*"
       ],
       "@core": [
-        "src/core"
+        "./src/core"
       ],
       "@core/*": [
-        "src/core/*"
+        "./src/core/*"
       ],
       "@constants": [
-        "src/constants"
+        "./src/constants"
       ],
       "@constants/*": [
-        "src/constants/*"
+        "./src/constants/*"
       ],
       "@logger": [
-        "src/logger"
+        "./src/logger"
       ],
       "@logger/*": [
-        "src/logger/*"
+        "./src/logger/*"
       ]
     },
   },

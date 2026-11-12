@@ -68,23 +68,15 @@ export class SecretString {
     }
 
     /**
-     * Check if value matches using constant-time comparison (timing-safe)
+     * Check if value matches using constant-time comparison (timing-safe).
+     * Both sides are hashed to fixed-length digests first, so neither the content
+     * nor the length of the secret can be inferred from the comparison time.
      */
     equals(other: string | SecretString): boolean {
         const otherValue = other instanceof SecretString ? other.getValue() : other;
-        const bufA = Buffer.from(this.#value, 'utf8');
-        const bufB = Buffer.from(otherValue, 'utf8');
-
-        if (bufA.length !== bufB.length) {
-            // Still do a comparison to maintain constant time
-            try { crypto.timingSafeEqual(bufA, bufA); } catch { /* ignore */ }
-            return false;
-        }
-
-        try {
-            return crypto.timingSafeEqual(bufA, bufB);
-        } catch {
-            return false;
-        }
+        if (typeof otherValue !== 'string') return false;
+        const digestA = crypto.createHash('sha256').update(this.#value, 'utf8').digest();
+        const digestB = crypto.createHash('sha256').update(otherValue, 'utf8').digest();
+        return crypto.timingSafeEqual(digestA, digestB);
     }
 }

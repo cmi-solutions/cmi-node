@@ -47,6 +47,24 @@ export interface CallbackHandlerOptions {
   failureResponse?: string;
 
   /**
+   * Answer sent to CMI for an authentic callback of a failed payment attempt
+   * (ProcReturnCode other than "00"). CMI expects an acknowledgement.
+   * @default "APPROVED"
+   */
+  declinedResponse?: string;
+
+  /**
+   * Check the order before CMI is answered — required by CMI's integration guide:
+   * the order identified by `result.orderData.orderId` must exist and its amount
+   * must equal `result.orderData.amount`.
+   *
+   * Runs only for authentic, approved payments, and before the answer is sent.
+   * Return `false` (or throw) to answer "FAILURE": CMI then does not capture the
+   * payment, and `onFailure` is called instead of `onSuccess`.
+   */
+  validateOrder?: (result: CallbackResult) => boolean | Promise<boolean>;
+
+  /**
    * Callback function when payment is verified
    */
   onSuccess?: (result: CallbackResult) => void | Promise<void>;

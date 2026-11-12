@@ -9,7 +9,8 @@ import { logger } from "@logger";
  * Create Hono route handler for CMI payment callbacks
  * 
  * Hono is a small, simple, and ultrafast web framework for the Edge.
- * Works with Cloudflare Workers, Deno, Bun, and Node.js.
+ * Works with Node.js, Bun and Deno. On Cloudflare Workers, enable the
+ * `nodejs_compat` compatibility flag: the gateway uses Node.js 'crypto' and Buffer.
  * 
  * @param gateway - CMIPaymentGateway instance
  * @param options - Handler options
@@ -50,23 +51,35 @@ export function createHonoHandler(
 
     return async (c: any) => {
         try {
-            // Hono context - parse JSON body
-            let params;
-            try {
-                params = await c.req.json();
-            } catch {
-                // Fallback to form data or query params
-                params = await c.req.parseBody?.() ||
-                    Object.fromEntries(new URL(c.req.url).searchParams);
+            const method = String(c.req.method ?? 'POST').toUpperCase();
+            let params: Record<string, unknown> = {};
+
+            if (method === 'GET') {
+                // The query string is accepted only when supportGetMethod is enabled.
+                if (handler.supportsGetMethod) {
+                    params = Object.fromEntries(new URL(c.req.url).searchParams);
+                }
+            } else {
+                try {
+                    params = await c.req.json();
+                } catch {
+                    // CMI posts application/x-www-form-urlencoded: parse it as a form.
+                    params = (await c.req.parseBody?.()) ?? {};
+                }
             }
 
+            // A Response can only be returned once, so onSuccess / onFailure run
+            // before the answer is returned (keep them fast, or hand the work to
+            // c.executionCtx.waitUntil() on Workers).
             const result = await handler.handle(params);
             const response = handler.getResponse(result);
 
             // Hono uses c.text() or c.body()
             return c.text(response.body, response.status);
-        } catch {
-            return c.text('FAILURE', 500);
+        } catch (error) {
+            logger.error('Hono callback handler error:', error);
+            const answer = handler.errorResponse();
+            return c.text(answer.body, answer.status);
         }
     };
 }
@@ -85,7 +98,7 @@ export function createHonoHandler(
  * registerHonoCallback(app, gateway, {
  *   path: '/cmi/callback',
  *   onSuccess: async (result) => {
- *     console.log('Payment successful:', result.orderData);
+ *     console.log('Payment successful for order', result.orderData?.orderId); // avoid logging card data
  *   }
  * });
  * 

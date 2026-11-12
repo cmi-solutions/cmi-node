@@ -1,6 +1,7 @@
 import { CallbackHandler } from "@core/CallbackHandler";
 import { CMIPaymentGateway } from "@core/CMIPaymentGateway";
 import { CallbackHandlerOptions } from "@types";
+import { logger } from "@logger";
 
 
 /**
@@ -27,7 +28,7 @@ import { CallbackHandlerOptions } from "@types";
  * 
  * export default createNextJsHandler(gateway, {
  *   onSuccess: async (result) => {
- *     console.log('Payment successful:', result.orderData);
+ *     console.log('Payment successful for order', result.orderData?.orderId); // avoid logging card data
  *     // Update database
  *     await prisma.order.update({
  *       where: { id: result.orderData.orderId },
@@ -66,23 +67,123 @@ export function createNextJsHandler(
     const handler = new CallbackHandler(gateway, options);
 
     return async (req: any, res: any) => {
-        // Handle both Pages Router and potential body parsing
-        const params = req.body || req.query || {};
-
+        let sent: unknown;
         try {
-            const result = await handler.handle(params);
-            const response = handler.getResponse(result);
+            // The body is used for POST callbacks. The query string is used only
+            // for GET requests when supportGetMethod is enabled, so callback data
+            // does not end up in URLs (and access logs) by accident.
+            const method = String(req?.method ?? 'POST').toUpperCase();
+            const params = method === 'GET'
+                ? (handler.supportsGetMethod ? req.query ?? {} : {})
+                : req.body ?? {};
 
-            return res.status(response.status).send(response.body);
-        } catch {
-            return res.status(500).send('FAILURE');
+            const { result, response } = await handler.evaluate(params);
+
+            // Answer CMI first, then run onSuccess / onFailure.
+            sent = res.status(response.status).send(response.body);
+            await handler.notify(result);
+            return sent;
+        } catch (error) {
+            logger.error('Next.js callback handler error:', error);
+            if (sent !== undefined) return sent;
+            const answer = handler.errorResponse();
+            return res.status(answer.status).send(answer.body);
         }
     };
 }
 
 /**
+ * Read the callback parameters from a web-standard Request.
+ *
+ * A Request body can be read only once, so it is read a single time and parsed
+ * according to its content type. CMI posts `application/x-www-form-urlencoded`;
+ * JSON and multipart bodies are also accepted. The URL query parameters are used
+ * only for a GET request, and only when `allowQuery` is true (`supportGetMethod`).
+ */
+export async function readAppRouterParams(
+    request: any,
+    options: { allowQuery?: boolean } = {}
+): Promise<Record<string, any>> {
+    const method = String(request?.method ?? 'POST').toUpperCase();
+    if (method === 'GET') {
+        if (!options.allowQuery) return {};
+        return Object.fromEntries(request?.nextUrl?.searchParams ?? new URL(request?.url ?? 'http://localhost').searchParams);
+    }
+
+    const contentType = String(request?.headers?.get?.('content-type') ?? '').toLowerCase();
+
+    if (contentType.includes('multipart/form-data') && typeof request.formData === 'function') {
+        const formData = await request.formData();
+        return Object.fromEntries(formData.entries());
+    }
+
+    const raw: string = typeof request?.text === 'function' ? await request.text() : '';
+    if (raw.trim() !== '') {
+        const looksLikeJson = contentType.includes('application/json') || /^\s*\{/.test(raw);
+        if (looksLikeJson) {
+            try {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object') return parsed;
+            } catch {
+                // Not JSON after all: parse it as a form body below.
+            }
+        }
+        // Like PHP's $_POST, a repeated field keeps its last value.
+        return Object.fromEntries(new URLSearchParams(raw));
+    }
+
+    return {};
+}
+
+/**
+ * Create a Next.js App Router handler (route.ts) once, and reuse it for every request.
+ *
+ * @example
+ * ```typescript
+ * // app/api/payment/callback/route.ts
+ * import { CMIPaymentGateway, createNextJsAppRouterHandler } from 'cmi-node';
+ *
+ * const gateway = new CMIPaymentGateway({ ... });
+ * export const POST = createNextJsAppRouterHandler(gateway, {
+ *   validateOrder: async (result) => isExpectedOrder(result.orderData),
+ *   onSuccess: async (result) => { await markPaid(result.orderData!.orderId); },
+ * });
+ * ```
+ */
+export function createNextJsAppRouterHandler(
+    gateway: CMIPaymentGateway,
+    options?: CallbackHandlerOptions
+): (request: any) => Promise<Response> {
+    const handler = new CallbackHandler(gateway, options);
+    return (request: any) => respondToAppRouterRequest(handler, request);
+}
+
+async function respondToAppRouterRequest(handler: CallbackHandler, request: any): Promise<Response> {
+    try {
+        const params = await readAppRouterParams(request, { allowQuery: handler.supportsGetMethod });
+        // A Response can only be returned once, so onSuccess / onFailure run
+        // before the answer is returned: keep them fast.
+        const result = await handler.handle(params);
+        const response = handler.getResponse(result);
+
+        // Return web-standard Response (App Router compatible)
+        return new Response(response.body, {
+            status: response.status,
+            headers: { 'Content-Type': 'text/plain' }
+        });
+    } catch (error) {
+        logger.error('Next.js App Router callback handler error:', error);
+        const answer = handler.errorResponse();
+        return new Response(answer.body, {
+            status: answer.status,
+            headers: { 'Content-Type': 'text/plain' }
+        });
+    }
+}
+
+/**
  * Helper for Next.js App Router (route.ts)
- * 
+ *
  * Returns a web-standard Response object compatible with Next.js App Router.
  * The return type is kept as `any` to avoid leaking internal type dependencies
  * to consumers — the actual returned value is always a `Response` instance.
@@ -114,36 +215,6 @@ export async function handleNextJsCallback(
     request: any,
     options?: CallbackHandlerOptions
 ): Promise<any> {
-    const handler = new CallbackHandler(gateway, options);
-
-    try {
-        // Try to parse body (for App Router)
-        let params;
-        try {
-            params = await request.json();
-        } catch {
-            // Fallback to form data if JSON parsing fails
-            try {
-                const formData = await request.formData();
-                params = Object.fromEntries(formData.entries());
-            } catch {
-                // Final fallback to query params
-                params = Object.fromEntries(request.nextUrl?.searchParams || []);
-            }
-        }
-
-        const result = await handler.handle(params);
-        const response = handler.getResponse(result);
-
-        // Return web-standard Response (App Router compatible)
-        return new Response(response.body, {
-            status: response.status,
-            headers: { 'Content-Type': 'text/plain' }
-        });
-    } catch {
-        return new Response('FAILURE', {
-            status: 500,
-            headers: { 'Content-Type': 'text/plain' }
-        });
-    }
+    // Builds a handler per call. Prefer createNextJsAppRouterHandler(), which builds it once.
+    return respondToAppRouterRequest(new CallbackHandler(gateway, options), request);
 }

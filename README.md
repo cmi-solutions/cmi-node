@@ -671,19 +671,18 @@ Pass an Express `app` in the second argument to auto-register the callback endpo
 
 ### `gateway.createPaymentParams(request)`
 
-Creates payment parameters for initiating a payment. Returns a `Record<string, any>` ready to pass to `generatePaymentForm()`.
+Creates payment parameters for initiating a payment. Returns a `PaymentParams` object (exactly what is posted to CMI, including `hash`) ready to pass to `generatePaymentForm()`.
 
 #### `PaymentRequest`
 
 | Field | Type | Required | Max Length | Description |
 |---|---|---|---|---|
-| `amount` | `number \| string` | ✅ | — | Payment amount (≥ 1, formatted to 2 decimal places) |
+| `amount` | `number \| string` | ✅ | — | Payment amount (≥ 1). More than 2 decimals are rounded half-up to the cent, as CMI does (`125.6578` → `125.66`) |
 | `email` | `string` | ✅ | 64 | Customer email address |
 | `BillToName` | `string` | ✅ | 255 | Customer billing name (alphanumeric + spaces) |
 | `okUrl` | `string` | ✅ | — | Redirect URL on success (must use `http(s)://`) |
 | `failUrl` | `string` | ✅ | — | Redirect URL on failure (must use `http(s)://`) |
 | `shopUrl` | `string` | ✅ | — | Your shop URL (must use `http(s)://`) |
-| `currency` | `string` | ✅ | — | Currency code or numeric. Must be `"504"` or `"MAD"`.|
 | `currency` | `string` | ✅ | — | Currency code or numeric. Must be `"504"` or `"MAD"`.|
 | `oid` | `string` | ❌ | 64 | Order ID (auto-generated if omitted) |
 | `rnd` | `string` | ❌ | 20 | Random value (auto-generated if omitted, must be alphabetic) |
@@ -693,8 +692,6 @@ Creates payment parameters for initiating a payment. Returns a `Record<string, a
 | `AutoRedirect` | `boolean` | ❌ | — | Auto-redirect after payment (default: `false`) |
 | `hashAlgorithm` | `string` | ❌ | — | Must be `"ver3"` if provided |
 | `encoding` | `string` | ❌ | — | Must be `"UTF-8"` if provided (default: `"UTF-8"`) |
-| `amountCur` | `number` | ❌ | — | Display amount in foreign currency (requires `symbolCur`) |
-| `symbolCur` | `string` | ❌ | — | Foreign currency code, e.g. `"840"` for USD (requires `amountCur`) |
 | `amountCur` | `number` | ❌ | — | Display amount in foreign currency (requires `symbolCur`) |
 | `symbolCur` | `string` | ❌ | — | Foreign currency code, e.g. `"840"` for USD (requires `amountCur`) |
 | `sessiontimeout` | `number` | ❌ | — | CMI hosted page session timeout in seconds. Min: 30, Max: 2700, Default: 1800. |
@@ -711,6 +708,8 @@ Creates payment parameters for initiating a payment. Returns a `Record<string, a
 | `BillToTelVoice` | `string` | ❌ | — | Billing telephone (voice) |
 
 > **Custom fields:** Any field not listed above is passed through to the gateway as-is. Field names are case-insensitive — `shopUrl`, `SHOPURL`, and `shopurl` all resolve to the same field.
+
+> **Accents and non-Latin text:** like CMI's reference PHP script, the SDK cleans `BillToName`, `BillToCompany`, `BillToStreet1`, `BillToCity`, `BillToStateProv`, `BillToPostalCode` and `BillToCountry`. Accents are removed (`Zoé Lahlou` → `Zoe Lahlou`), and characters other than `a-z A-Z 0-9 _ - space` are dropped, including Arabic letters. A `BillToName` written only in Arabic is therefore rejected; an optional field that ends up empty is not sent. Other fields, such as `description` and custom fields, are sent in UTF-8 unchanged.
 
 #### Item-Level Fields
 
@@ -944,6 +943,19 @@ if (result.success) {
   // Trust the data!
 }
 ```
+
+---
+
+## 🔑 Handling your storeKey safely
+
+The `storeKey` signs every payment and every callback. Anyone who has it can forge a callback that marks an order as paid.
+
+- **Server only.** Create `CMIPaymentGateway` in server code: an API route, a route handler, a server action or a controller. Importing `cmi-node` from browser code throws: the package's `browser` export condition resolves to a module that throws, and the constructor also refuses to run where `window` and `document` exist.
+- **Never give CMI variables a public prefix.** `NEXT_PUBLIC_CMI_STORE_KEY`, `VITE_CMI_STORE_KEY`, `PUBLIC_*` or `REACT_APP_*` variables are inlined into the JavaScript sent to browsers. Use plain names such as `CMI_STORE_KEY` and `CMI_CLIENT_ID`, and read them only on the server.
+- **Keep it out of git.** Put it in your host's secret settings (Vercel, Render, Railway…) or in a `.env` file listed in `.gitignore`. If a real key was ever committed, change it in the CMI back-office: removing the commit is not enough.
+- **Use a long random key.** CMI's `ver3` hash is an unsalted SHA-512 over values that are all visible in the payment form, so a short key can be guessed offline from a single form. The SDK logs a warning for keys shorter than 16 characters.
+- **The SDK never outputs it.** It is held in a private field, masked in `toString()`, `JSON.stringify()` and `console.log()`, left out of `getConfig()`, and never logged, not even at `debug` level. Tests in `test/secret-leakage.test.ts` check this on every change.
+- **Don't log callback data in full.** `result.orderData` contains the masked card number, the card holder's name and the customer's IP address. Log the order id instead.
 
 ---
 

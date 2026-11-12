@@ -705,11 +705,10 @@ describe('PaymentValidator', () => {
         );
     });
 
-    it('should throw for BillToName with special characters', () => {
-        assert.throws(
-            () => PaymentValidator.validate({ ...validPaymentRequest, BillToName: 'John@Doe' } as any),
-            /BillToName/
-        );
+    it('should clean BillToName special characters like CMI PHP (not reject them)', () => {
+        const gw = new CMIPaymentGateway(validConfig);
+        const params = gw.createPaymentParams({ ...validPaymentRequest, BillToName: 'John@Doe' });
+        assert.strictEqual(params.BillToName, 'JohnDoe');
     });
 
     it('should throw for deprecated phone field', () => {
@@ -842,6 +841,7 @@ describe('CallbackHandler', () => {
         const resp = h.getResponse({
             success: true,
             status: 'ACTION=POSTAUTH',
+            verified: true,
             message: 'ok',
             orderData: { orderId: 'T', amount: 100, currency: '504', transactionId: 'TX' },
         });
@@ -1059,10 +1059,12 @@ describe('Next.js Adapter', () => {
         const params = gateway.createPaymentParams(validPaymentRequest);
         const cb = simulateCMICallback(params, validConfig.storeKey);
 
-        // Mock App Router Request with json() method
-        const mockRequest = {
-            json: async () => cb,
-        };
+        // Real web-standard Request with a JSON body
+        const mockRequest = new Request('https://shop.example.ma/api/cb', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(cb),
+        });
 
         const response = await handleNextJsCallback(gateway, mockRequest, {
             onSuccess: () => { successCalled = true; }
@@ -1073,19 +1075,32 @@ describe('Next.js Adapter', () => {
         assert.strictEqual(response.status, 200);
     });
 
-    it('handleNextJsCallback should fallback to formData', async () => {
-        const params = gateway.createPaymentParams(validPaymentRequest);
+    it('handleNextJsCallback should accept the form-encoded body CMI really sends', async () => {
+        const gw = new CMIPaymentGateway({ ...validConfig, confirmationMode: 'auto' });
+        const params = gw.createPaymentParams(validPaymentRequest);
         const cb = simulateCMICallback(params, validConfig.storeKey);
 
-        // Mock request where json() fails but formData() works
-        const formData = new Map(Object.entries(cb));
-        const mockRequest = {
-            json: async () => { throw new Error('not json'); },
-            formData: async () => ({ entries: () => formData.entries() }),
-        };
+        // A Request body can be read only once: this used to fail with "Body is unusable".
+        const request = new Request('https://shop.example.ma/api/cb', {
+            method: 'POST',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams(cb).toString(),
+        });
 
-        const response = await handleNextJsCallback(gateway, mockRequest);
-        assert.ok(response instanceof Response);
+        const response = await handleNextJsCallback(gw, request);
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(await response.text(), 'ACTION=POSTAUTH');
+    });
+
+    it('handleNextJsCallback should accept a multipart body', async () => {
+        const gw = new CMIPaymentGateway({ ...validConfig, confirmationMode: 'auto' });
+        const params = gw.createPaymentParams(validPaymentRequest);
+        const cb = simulateCMICallback(params, validConfig.storeKey);
+        const form = new FormData();
+        for (const [k, v] of Object.entries(cb)) form.append(k, String(v));
+
+        const response = await handleNextJsCallback(gw, new Request('https://shop.example.ma/api/cb', { method: 'POST', body: form }));
+        assert.strictEqual(await response.text(), 'ACTION=POSTAUTH');
     });
 
     it('handleNextJsCallback should return 500 on error', async () => {
@@ -1219,6 +1234,7 @@ describe('Hono Adapter', () => {
 
         assert.strictEqual(successCalled, true);
         assert.strictEqual(responseStatus, 200);
+        assert.strictEqual(responseBody, 'APPROVED');
     });
 
     it('should fallback to parseBody when json() fails', async () => {
@@ -1337,6 +1353,7 @@ describe('NestJS Adapter', () => {
         const result = {
             success: true as const,
             status: 'APPROVED' as const,
+            verified: true,
             message: 'ok',
             orderData: { orderId: 'T', amount: 100, currency: '504', transactionId: 'TX' },
         };
@@ -1563,14 +1580,13 @@ describe('Validator — Extended Coverage', () => {
         );
     });
 
-    it('should throw for billing field with special chars', () => {
-        assert.throws(
-            () => PaymentValidator.validate({
-                ...validPaymentRequest,
-                BillToCity: '<script>alert(1)</script>',
-            } as any),
-            /BillToCity.*special characters/
-        );
+    it('should strip special chars from billing fields like CMI PHP', () => {
+        const gw = new CMIPaymentGateway(validConfig);
+        const params = gw.createPaymentParams({
+            ...validPaymentRequest,
+            BillToCity: '<script>alert(1)</script>',
+        });
+        assert.strictEqual(params.BillToCity, 'scriptalert1script');
     });
 
     it('should throw for billing field exceeding max length', () => {
@@ -1603,14 +1619,10 @@ describe('Validator — Extended Coverage', () => {
         );
     });
 
-    it('should throw for BillToName with consecutive spaces', () => {
-        assert.throws(
-            () => PaymentValidator.validate({
-                ...validPaymentRequest,
-                BillToName: 'John  Doe',
-            } as any),
-            /BillToName.*special characters/
-        );
+    it('should keep inner consecutive spaces in BillToName, like CMI PHP', () => {
+        const gw = new CMIPaymentGateway(validConfig);
+        const params = gw.createPaymentParams({ ...validPaymentRequest, BillToName: '  John  Doe  ' });
+        assert.strictEqual(params.BillToName, 'John  Doe');
     });
 });
 
@@ -1735,8 +1747,6 @@ describe('PaymentBuilder — description and custom fields', () => {
 // 20. Audit Fixes & Regressions
 // ===========================================================================
 describe('Audit Fixes & Regressions', () => {
-    let gateway: CMIPaymentGateway;
-    beforeEach(() => { gateway = new CMIPaymentGateway(validConfig); });
 
     it('SecretString should provide runtime privacy via ES2022 #private fields', () => {
         const secret = new SecretString('super-secret-key-123');
