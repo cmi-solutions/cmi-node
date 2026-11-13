@@ -87,23 +87,35 @@ Version 2.0 contains breaking changes. The full list is in [CHANGELOG.md](./CHAN
 - **Declined payments have their own status.** An authentic callback for a declined payment now returns `status: 'DECLINED'` with `verified: true` (it used to be `'FAILURE'`), and CMI is answered `APPROVED` as an acknowledgement, like CMI's reference `callback.php`. `'FAILURE'` now means a forged or invalid callback, or an order refused by `validateOrder`. See [`verifyCallback`](#gatewayverifycallbackcallbackparams).
 - **The logger `sink` receives one string per call** (prefix, level, time, message and error stack), so pino and winston keep the whole message.
 
+### Kits
+
+The SDK is organised in kits, one per way of working with CMI:
+
+| Kit | What it does | Import from |
+|---|---|---|
+| **Standard kit** | Redirects the customer to CMI's payment page with a signed form, and handles CMI's callback | `cmi-node/standard` |
+| **API kit** | Back-office operations through CMI's XML API (capture, refund, void, order status) | coming in 2.1 |
+| **Tokenization kit** | Payments with a registered card | coming soon |
+
+`cmi-node` itself re-exports every kit, so `import { CMIPaymentGateway } from 'cmi-node'` works as well.
+
 ### Subpath Imports (Recommended)
 
 For optimal bundle size, import framework adapters from their dedicated subpath:
 
 ```typescript
-// Core — always available
-import { CMIPaymentGateway } from 'cmi-node';
+// Standard kit
+import { CMIPaymentGateway } from 'cmi-node/standard';   // or from 'cmi-node'
 
 // Framework adapters — import only what you need
-import { createExpressMiddleware } from 'cmi-node/express';
-import { createNextJsHandler, createNextJsAppRouterHandler, handleNextJsCallback } from 'cmi-node/nextjs';
-import { createFastifyHandler } from 'cmi-node/fastify';
-import { createHonoHandler } from 'cmi-node/hono';
-import { NestJSCallbackHandler } from 'cmi-node/nestjs';
+import { createExpressMiddleware } from 'cmi-node/standard/express';   // or 'cmi-node/express'
+import { createNextJsHandler, createNextJsAppRouterHandler, handleNextJsCallback } from 'cmi-node/standard/nextjs';
+import { createFastifyHandler } from 'cmi-node/standard/fastify';
+import { createHonoHandler } from 'cmi-node/standard/hono';
+import { NestJSCallbackHandler } from 'cmi-node/standard/nestjs';
 ```
 
-> **Note:** All adapters are also re-exported from the main `'cmi-node'` entry for convenience, but using subpath imports avoids loading adapters you don't need.
+> **Note:** The shorter paths (`cmi-node/express`, `cmi-node/nextjs`, `cmi-node/fastify`, `cmi-node/hono`, `cmi-node/nestjs`) are the same files and keep working. All adapters are also re-exported from the main `'cmi-node'` entry, but subpath imports avoid loading adapters you don't need.
 
 ---
 

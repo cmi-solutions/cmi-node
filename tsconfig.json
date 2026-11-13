@@ -27,41 +27,14 @@
       "node"
     ],
     "paths": {
-      "@types": [
-        "./src/types"
+      "@shared/*": [
+        "./src/shared/*"
       ],
-      "@types/*": [
-        "./src/types/*"
+      "@standard": [
+        "./src/kits/standard"
       ],
-      "@utils": [
-        "./src/utils"
-      ],
-      "@utils/*": [
-        "./src/utils/*"
-      ],
-      "@validators": [
-        "./src/validators"
-      ],
-      "@validators/*": [
-        "./src/validators/*"
-      ],
-      "@core": [
-        "./src/core"
-      ],
-      "@core/*": [
-        "./src/core/*"
-      ],
-      "@constants": [
-        "./src/constants"
-      ],
-      "@constants/*": [
-        "./src/constants/*"
-      ],
-      "@logger": [
-        "./src/logger"
-      ],
-      "@logger/*": [
-        "./src/logger/*"
+      "@standard/*": [
+        "./src/kits/standard/*"
       ]
     },
   },
