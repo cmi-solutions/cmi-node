@@ -49,6 +49,44 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./standard": {
+      "workerd": {
+        "types": "./dist/standard.d.ts",
+        "default": "./dist/standard.js"
+      },
+      "worker": {
+        "types": "./dist/standard.d.ts",
+        "default": "./dist/standard.js"
+      },
+      "browser": "./dist/browser.js",
+      "import": {
+        "types": "./dist/standard.d.ts",
+        "default": "./dist/standard.js"
+      },
+      "require": {
+        "types": "./dist/standard.d.cts",
+        "default": "./dist/standard.cjs"
+      }
+    },
+    "./api": {
+      "workerd": {
+        "types": "./dist/api.d.ts",
+        "default": "./dist/api.js"
+      },
+      "worker": {
+        "types": "./dist/api.d.ts",
+        "default": "./dist/api.js"
+      },
+      "browser": "./dist/browser.js",
+      "import": {
+        "types": "./dist/api.d.ts",
+        "default": "./dist/api.js"
+      },
+      "require": {
+        "types": "./dist/api.d.cts",
+        "default": "./dist/api.cjs"
+      }
+    },
     "./express": {
       "workerd": {
         "types": "./dist/adapters/express.d.ts",
@@ -144,6 +182,101 @@
         "default": "./dist/adapters/nestjs.cjs"
       }
     },
+    "./standard/express": {
+      "workerd": {
+        "types": "./dist/adapters/express.d.ts",
+        "default": "./dist/adapters/express.js"
+      },
+      "worker": {
+        "types": "./dist/adapters/express.d.ts",
+        "default": "./dist/adapters/express.js"
+      },
+      "browser": "./dist/browser.js",
+      "import": {
+        "types": "./dist/adapters/express.d.ts",
+        "default": "./dist/adapters/express.js"
+      },
+      "require": {
+        "types": "./dist/adapters/express.d.cts",
+        "default": "./dist/adapters/express.cjs"
+      }
+    },
+    "./standard/nextjs": {
+      "workerd": {
+        "types": "./dist/adapters/nextjs.d.ts",
+        "default": "./dist/adapters/nextjs.js"
+      },
+      "worker": {
+        "types": "./dist/adapters/nextjs.d.ts",
+        "default": "./dist/adapters/nextjs.js"
+      },
+      "browser": "./dist/browser.js",
+      "import": {
+        "types": "./dist/adapters/nextjs.d.ts",
+        "default": "./dist/adapters/nextjs.js"
+      },
+      "require": {
+        "types": "./dist/adapters/nextjs.d.cts",
+        "default": "./dist/adapters/nextjs.cjs"
+      }
+    },
+    "./standard/fastify": {
+      "workerd": {
+        "types": "./dist/adapters/fastify.d.ts",
+        "default": "./dist/adapters/fastify.js"
+      },
+      "worker": {
+        "types": "./dist/adapters/fastify.d.ts",
+        "default": "./dist/adapters/fastify.js"
+      },
+      "browser": "./dist/browser.js",
+      "import": {
+        "types": "./dist/adapters/fastify.d.ts",
+        "default": "./dist/adapters/fastify.js"
+      },
+      "require": {
+        "types": "./dist/adapters/fastify.d.cts",
+        "default": "./dist/adapters/fastify.cjs"
+      }
+    },
+    "./standard/hono": {
+      "workerd": {
+        "types": "./dist/adapters/hono.d.ts",
+        "default": "./dist/adapters/hono.js"
+      },
+      "worker": {
+        "types": "./dist/adapters/hono.d.ts",
+        "default": "./dist/adapters/hono.js"
+      },
+      "browser": "./dist/browser.js",
+      "import": {
+        "types": "./dist/adapters/hono.d.ts",
+        "default": "./dist/adapters/hono.js"
+      },
+      "require": {
+        "types": "./dist/adapters/hono.d.cts",
+        "default": "./dist/adapters/hono.cjs"
+      }
+    },
+    "./standard/nestjs": {
+      "workerd": {
+        "types": "./dist/adapters/nestjs.d.ts",
+        "default": "./dist/adapters/nestjs.js"
+      },
+      "worker": {
+        "types": "./dist/adapters/nestjs.d.ts",
+        "default": "./dist/adapters/nestjs.js"
+      },
+      "browser": "./dist/browser.js",
+      "import": {
+        "types": "./dist/adapters/nestjs.d.ts",
+        "default": "./dist/adapters/nestjs.js"
+      },
+      "require": {
+        "types": "./dist/adapters/nestjs.d.cts",
+        "default": "./dist/adapters/nestjs.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -154,7 +287,7 @@
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "prepublishOnly": "npm run clean && npm run type-check && npm run test && npm run build",
-    "test": "tsx --test test/accountType.test.ts test/gateway.test.ts test/php-parity.test.ts test/review-fixes.test.ts test/secret-leakage.test.ts test/pre-release.test.ts test/adapters.integration.test.ts",
+    "test": "tsx --test test/standard/accountType.test.ts test/standard/gateway.test.ts test/standard/php-parity.test.ts test/standard/review-fixes.test.ts test/standard/secret-leakage.test.ts test/standard/pre-release.test.ts test/standard/adapters.integration.test.ts test/shared/cc5.test.ts test/api/api-client.test.ts",
     "test:coverage": "c8 --check-coverage --lines 92 --branches 86 tsx --test \"test/**/*.test.ts\"",
     "lint": "eslint src",
     "format": "prettier --write \"src/**/*.ts\"",

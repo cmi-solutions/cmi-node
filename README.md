@@ -18,6 +18,7 @@ The `cmi-node` package provides a seamless way to integrate the Centre Monétiqu
 - **Secure by Design**: Built-in hash verification (SHA-512) and timing-safe comparisons.
 - **Flexible Callbacks**: Support for both `'auto'` and `'manual'` confirmation modes.
 - **Middleware Helpers**: Pre-built helpers for popular frameworks to get you started in minutes.
+- **Back-office API**: Capture, refund, void and query orders through CMI's XML API (`CMIApiClient`).
 - **No External Runtime Dependencies**: Uses only Node.js built-ins (`crypto`, `buffer`). Requires Node.js ≥ 22.12.
 - **Server-only**: Importing the SDK into browser code fails immediately, so the `storeKey` can never be bundled into a web page.
 
@@ -87,23 +88,35 @@ Version 2.0 contains breaking changes. The full list is in [CHANGELOG.md](./CHAN
 - **Declined payments have their own status.** An authentic callback for a declined payment now returns `status: 'DECLINED'` with `verified: true` (it used to be `'FAILURE'`), and CMI is answered `APPROVED` as an acknowledgement, like CMI's reference `callback.php`. `'FAILURE'` now means a forged or invalid callback, or an order refused by `validateOrder`. See [`verifyCallback`](#gatewayverifycallbackcallbackparams).
 - **The logger `sink` receives one string per call** (prefix, level, time, message and error stack), so pino and winston keep the whole message.
 
+### Kits
+
+The SDK is organised in kits, one per way of working with CMI:
+
+| Kit | What it does | Import from |
+|---|---|---|
+| **Standard kit** | Redirects the customer to CMI's payment page with a signed form, and handles CMI's callback | `cmi-node/standard` |
+| **API kit** | Back-office operations through CMI's XML API (capture, refund, void, order status) | `cmi-node/api` |
+| **Tokenization kit** | Payments with a registered card | coming soon |
+
+`cmi-node` itself re-exports every kit, so `import { CMIPaymentGateway } from 'cmi-node'` works as well.
+
 ### Subpath Imports (Recommended)
 
 For optimal bundle size, import framework adapters from their dedicated subpath:
 
 ```typescript
-// Core — always available
-import { CMIPaymentGateway } from 'cmi-node';
+// Standard kit
+import { CMIPaymentGateway } from 'cmi-node/standard';   // or from 'cmi-node'
 
 // Framework adapters — import only what you need
-import { createExpressMiddleware } from 'cmi-node/express';
-import { createNextJsHandler, createNextJsAppRouterHandler, handleNextJsCallback } from 'cmi-node/nextjs';
-import { createFastifyHandler } from 'cmi-node/fastify';
-import { createHonoHandler } from 'cmi-node/hono';
-import { NestJSCallbackHandler } from 'cmi-node/nestjs';
+import { createExpressMiddleware } from 'cmi-node/standard/express';   // or 'cmi-node/express'
+import { createNextJsHandler, createNextJsAppRouterHandler, handleNextJsCallback } from 'cmi-node/standard/nextjs';
+import { createFastifyHandler } from 'cmi-node/standard/fastify';
+import { createHonoHandler } from 'cmi-node/standard/hono';
+import { NestJSCallbackHandler } from 'cmi-node/standard/nestjs';
 ```
 
-> **Note:** All adapters are also re-exported from the main `'cmi-node'` entry for convenience, but using subpath imports avoids loading adapters you don't need.
+> **Note:** The shorter paths (`cmi-node/express`, `cmi-node/nextjs`, `cmi-node/fastify`, `cmi-node/hono`, `cmi-node/nestjs`) are the same files and keep working. All adapters are also re-exported from the main `'cmi-node'` entry, but subpath imports avoid loading adapters you don't need.
 
 ---
 
@@ -1024,6 +1037,71 @@ A class-based wrapper for NestJS that wraps `CallbackHandler` for use with the D
 | `handle(body, res)` | `(body: any, res: any) => Promise<any>` | Handles the callback and writes the CMI response to `res` |
 | `process(body)` | `(body: any) => Promise<CallbackResult>` | Handles the callback and returns the `CallbackResult` without writing to `res` |
 | `getResponseString(result)` | `(result: CallbackResult) => string` | Returns the appropriate CMI response string (`ACTION=POSTAUTH`, `APPROVED`, or `FAILURE`) |
+
+---
+
+## 🏦 API kit: back-office operations (capture, refund, void, order status)
+
+`CMIApiClient` (from `cmi-node/api`, or `cmi-node`) calls CMI's XML API from your server to manage orders after the payment page:
+
+| Method | CMI operation | Use it to |
+|---|---|---|
+| `postAuth({ orderId, amount? })` | PostAuth | Capture a pre-authorized order (whole amount, or part of it) |
+| `refund({ orderId, amount?, currency? })` | Credit | Refund a captured order (whole, or several partial refunds) |
+| `void({ orderId })` | Void | Cancel a pre-authorization, capture, sale or refund |
+| `orderStatus(orderId)` | ORDERSTATUS query | Check an order, e.g. when CMI's callback never reached you |
+| `orderHistory(orderId)` | ORDERHISTORY query | List every transaction of an order |
+
+It needs an **API user** (a name and password created for API access in CMI's back office) and the API URL, both given by CMI. It does not use the `storeKey`.
+
+```ts
+import { CMIApiClient, CMIApiError } from 'cmi-node/api';
+
+const api = new CMIApiClient({
+  apiUrl: process.env.CMI_API_URL!,       // https:// only (http allowed for localhost)
+  clientId: process.env.CMI_CLIENT_ID!,
+  username: process.env.CMI_API_USER!,
+  password: process.env.CMI_API_PASSWORD!,
+  timeoutMs: 30_000,                      // optional, default 30 s
+});
+
+// With confirmationMode 'manual', the payment is only pre-authorized: capture it when you ship.
+const capture = await api.postAuth({ orderId: 'ORDER-123' });
+if (!capture.approved) {
+  console.error('Capture refused:', capture.procReturnCode, capture.message);
+}
+
+// Partial refund
+await api.refund({ orderId: 'ORDER-123', amount: 50 });
+
+// Status
+const status = await api.orderStatus('ORDER-123');
+if (status.found && status.transaction?.shipmentPossible) {
+  // captured or settled: safe to ship
+}
+```
+
+**Results.** A refused operation is not an exception: `approved` is `false` and `response` (`Declined` or `Error`), `procReturnCode` (`00` approved, `99` gateway error, other values are bank codes), `message` and `errorCode` say why. `fields` and `extra` hold CMI's whole answer.
+
+**Order statuses.** `orderStatus()` returns CMI's last successful transaction for the order (or the last failed one), with amounts converted from cents:
+
+| `status` | CMI code | Can ship? | `transient` |
+|---|---|---|---|
+| `declined` | D | no | no |
+| `preauthorized` | A | no | no |
+| `captured` / `settled` | C / S | **yes** | no |
+| `refunded` | C or S on a refund (charge type C) | no | no |
+| `voided` | V | no | no |
+| `pending` | PN | no | **yes**: query again (up to 72 h) |
+| `reversal_required` | R | no | **yes**: query again until end of day |
+| `processing` | NW | no | **yes**: query again (CMI suggests every 5 min) |
+| `error` / `cancelled` | ERR / CNCL | no | no (recurring orders) |
+
+**Errors.** `CMIApiError` is thrown only when no usable answer came back: `code` is `TIMEOUT` (no complete answer within `timeoutMs`, including an answer that stopped halfway), `NETWORK`, `HTTP_STATUS` or `INVALID_RESPONSE`. The client never retries by itself. Wrong settings (an `http://` URL, an empty or too long value, a control character in the credentials, a currency without an amount) are rejected with a plain `Error` before anything is sent.
+
+> **After any `CMIApiError` on a capture, refund or void, check before retrying.** The request may have reached CMI even though no usable answer came back, whatever the error code. Call `orderStatus()` (or `orderHistory()` for refunds) before sending the same capture or refund again, or the money may move twice.
+
+**Security.** The password is kept in a private field and never logged, serialized or included in error messages; redirects are refused so the credentials are never resent elsewhere. Keep `CMI_API_PASSWORD` in your server environment like the storeKey.
 
 ---
 
