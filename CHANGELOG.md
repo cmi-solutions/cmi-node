@@ -20,13 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed unused internal helpers: `sha512Base64`, `FormatterUtil.formatLanguage`,
   `normalizeAccountType`, `normalizeConfirmationMode`, `normalizeStoreType`,
   `normalizeTranType`, `BILLING_FIELDS`, `HASH_EXCLUDED_FIELDS`.
+- An authentic callback for a declined payment returns `status: 'DECLINED'` with
+  `verified: true` (it was `'FAILURE'`), and CMI is answered `APPROVED` as an
+  acknowledgement, like CMI's reference `callback.php` (`declinedResponse` changes it).
+  `'FAILURE'` now means a forged or invalid callback, or an order refused by
+  `validateOrder`. `onFailure` still runs for both: check `result.verified`.
+- A logger `sink` receives one string per call (prefix, level, time, message and error
+  stack) instead of separate arguments. pino kept only the first argument, so the message
+  and the error were lost.
 
 ### Added
 - `gateway.generatePaymentInputs(params)` for custom forms under a strict CSP.
 - `createNextJsAppRouterHandler(gateway, options)`, built once and reused per request.
 - `CallbackHandler.evaluate()`, `notify()` and `errorResponse()` for custom adapters.
 - `configureLogger({ sink })` to send log lines to your own logger; `LogSink` type.
-- A one-time warning when `confirmationMode: 'auto'` runs without `validateOrder`.
+- A one-time warning when a callback handler runs without `validateOrder`, in `auto` mode
+  (payments are captured unchecked) and in `manual` mode (payments are approved and
+  `onSuccess` runs for every replayed callback).
+- `confirmationMode` in the exported `PaymentConfig` type (it was accepted but untyped, so
+  `const config: PaymentConfig = { ..., confirmationMode: 'auto' }` did not compile).
 - `SECURITY.md` and Dependabot configuration.
 - Server-only guard: importing the SDK into browser code fails at once (a `browser`
   export condition resolves to a module that throws), and the constructor refuses to run
@@ -46,8 +58,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a length mismatch.
 - README: new "Handling your storeKey safely" section; JSDoc examples log the order id
   instead of the full callback data.
+- A callback field sent twice (`oid=A&oid=B`) is now reported with the value that was
+  verified. Express and Fastify parse a repeated field into an array: the hash used its
+  last value (as PHP's `$_POST` does), but `orderData` reported the array and the first
+  amount, so a payer could prepend another order's id and amount to their own signed
+  callback and have them passed to `validateOrder` and `onSuccess`.
+- README: every framework example now checks the order (exists, not already paid,
+  amount) in `validateOrder`, which runs before CMI is answered, instead of in `onSuccess`.
 
 ### Fixed
+- Bundlers kept the server-only guard out of browser builds: `"sideEffects": false` let
+  esbuild drop the throwing `browser` stub, so `import { CMIPaymentGateway } from 'cmi-node'`
+  in client code became `undefined` instead of throwing. `sideEffects` now lists the stub.
+- `gateway.getConfig()` returns a copy: changing the result no longer changes
+  `getConfirmationMode()` while the callback verifier kept the old mode.
+- The Hono adapter answered `500 FAILURE` to every form-encoded callback on Hono 4.0.0
+  to 4.12.26: trying `json()` first consumed the request body. It now reads the body once.
+  CI also runs the adapter tests on Hono 4.0.0.
+- README: the Fastify example registers `@fastify/formbody` (without it CMI's callback got
+  HTTP 415) and no longer registers the same route twice; the Next.js Pages Router
+  example exports `gateway`; duplicated object keys removed from the Express and NestJS
+  examples; the manual Express handler answers with `handler.getResponse()`.
 - Amounts with more than 2 decimals are rounded half-up to the cent on their decimal
   digits, like CMI's gateway (`125.6578` → `125.66`, `125.3333` → `125.33`). The old
   `Number.toFixed(2)` rounding was wrong for some values (`1.005` → `"1.00"`, now `"1.01"`).

@@ -167,6 +167,13 @@ jobs:
           npm pack --pack-destination "$RUNNER_TEMP" > /dev/null
           npx --yes @arethetypeswrong/cli@0.18.5 "$RUNNER_TEMP"/cmi-node-*.tgz
 
+      # The peer range is hono ^4.0.0: run the real-framework adapter tests on the
+      # lowest version too (Hono < 4.12.34 cannot re-read a request body).
+      - name: Adapter tests on the lowest supported Hono (4.0.0)
+        run: |
+          npm install --no-save hono@4.0.0
+          npx tsx --test test/adapters.integration.test.ts
+
   # ─────────────────────────────────────────────────────────────
   # JOB — Secret scan of the full git history (gitleaks)
   # The Docker image avoids gitleaks-action, which needs a paid

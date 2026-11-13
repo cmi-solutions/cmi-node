@@ -323,11 +323,26 @@ describe('Logger defaults and sink (L4)', () => {
         assert.equal(lines.length, 0);
     });
 
-    it('sends lines to the configured sink', () => {
-        const lines: string[] = [];
-        configureLogger({ enabled: true, level: 'debug', sink: { debug: (...a) => lines.push(`debug ${a.at(-1)}`), info: (...a) => lines.push(`info ${a.at(-1)}`), warn: (...a) => lines.push(`warn ${a.at(-1)}`), error: (...a) => lines.push(`error ${a.at(-1)}`) } });
+    it('sends one line per call to the configured sink', () => {
+        const lines: unknown[][] = [];
+        const record = (level: string) => (...a: unknown[]) => lines.push([level, ...a]);
+        configureLogger({ enabled: true, level: 'debug', sink: { debug: record('debug'), info: record('info'), warn: record('warn'), error: record('error') } });
         logger.debug('d'); logger.info('i'); logger.warn('w'); logger.error('e');
-        assert.deepEqual(lines, ['debug d', 'info i', 'warn w', 'error e']);
+        assert.equal(lines.length, 4);
+        for (const [i, [level, ...args]] of lines.entries()) {
+            assert.equal(args.length, 1, 'the sink receives a single string');
+            const text = String(args[0]);
+            assert.match(text, new RegExp(`^\\[CMI Gateway\\] \\[${String(level).toUpperCase()}\\] \\S+ ${'diwe'[i]}$`));
+        }
+    });
+
+    it('a sink that keeps only its first argument (like pino) still gets the message and the error', () => {
+        const kept: string[] = [];
+        const firstOnly = (first: unknown) => { kept.push(String(first)); };
+        configureLogger({ enabled: true, level: 'error', sink: { debug: firstOnly, info: firstOnly, warn: firstOnly, error: firstOnly } });
+        logger.error('Callback handler error:', new Error('database is down'));
+        assert.equal(kept.length, 1);
+        assert.match(kept[0], /\[ERROR\] .* Callback handler error: Error: database is down/);
     });
 
     it('warns once when auto mode runs without validateOrder (M3)', async () => {
@@ -338,5 +353,22 @@ describe('Logger defaults and sink (L4)', () => {
         await handler.handle(signedCallback(gw));
         await handler.handle(signedCallback(gw));
         assert.equal(warnings.filter((w) => w.includes('validateOrder')).length, 1);
+    });
+
+    it('also warns once in manual mode without validateOrder, and not when it is given', async () => {
+        const warnings: string[] = [];
+        configureLogger({ enabled: true, level: 'warn', sink: { debug() {}, info() {}, warn: (...a) => warnings.push(String(a.at(-1))), error() {} } });
+        const gw = new CMIPaymentGateway({ ...validConfig, confirmationMode: 'manual' });
+        const handler = new CallbackHandler(gw);
+        await handler.handle(signedCallback(gw));
+        await handler.handle(signedCallback(gw));
+        const found = warnings.filter((w) => w.includes('validateOrder'));
+        assert.equal(found.length, 1);
+        assert.match(found[0], /'manual'.*replayed callback/);
+
+        warnings.length = 0;
+        const checked = new CallbackHandler(gw, { validateOrder: () => true });
+        await checked.handle(signedCallback(gw));
+        assert.equal(warnings.filter((w) => w.includes('validateOrder')).length, 0);
     });
 });

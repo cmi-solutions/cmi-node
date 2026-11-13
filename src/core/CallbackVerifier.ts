@@ -30,6 +30,18 @@ export class CallbackVerifier {
     }
 
     /**
+     * Copy the callback fields as strings (null prototype, so a "__proto__" key stays
+     * an ordinary field). A repeated field keeps its last value, as in the hash.
+     */
+    private static toFieldStrings(params: Record<string, unknown>): Record<string, string> {
+        const fields: Record<string, string> = Object.create(null);
+        for (const key of Object.keys(params)) {
+            fields[key] = HashUtil.toFieldString(params[key]);
+        }
+        return fields;
+    }
+
+    /**
      * Safely parse an amount value, returning 0 if unparseable
      */
     private static safeParseAmount(value: any): number {
@@ -62,8 +74,14 @@ export class CallbackVerifier {
      * @param callbackParams Parameters received from CMI callback
      * @returns Callback verification result
      */
-    verify(callbackParams: Record<string, any>): CallbackResult {
+    verify(rawParams: Record<string, any>): CallbackResult {
         try {
+            // Read every field as text exactly once, so the hash and orderData use the
+            // same values. Body parsers turn a repeated field (oid=A&oid=B) into an
+            // array; the hash keeps the last value, like PHP's $_POST, so orderData
+            // must report that value too, never the first one or the array.
+            const callbackParams = CallbackVerifier.toFieldStrings(rawParams);
+
             // Extract received hash
             const receivedHash = callbackParams.HASH || callbackParams.hash;
 

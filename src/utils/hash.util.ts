@@ -63,7 +63,7 @@ export class HashUtil {
   }
 
   /** A posted value as text. A repeated field keeps its last value, like PHP's $_POST. */
-  private static toFieldString(value: unknown): string {
+  static toFieldString(value: unknown): string {
     if (Array.isArray(value)) value = value[value.length - 1];
     return value === undefined || value === null ? "" : String(value);
   }
