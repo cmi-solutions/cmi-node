@@ -88,23 +88,35 @@ Version 2.0 contains breaking changes. The full list is in [CHANGELOG.md](./CHAN
 - **Declined payments have their own status.** An authentic callback for a declined payment now returns `status: 'DECLINED'` with `verified: true` (it used to be `'FAILURE'`), and CMI is answered `APPROVED` as an acknowledgement, like CMI's reference `callback.php`. `'FAILURE'` now means a forged or invalid callback, or an order refused by `validateOrder`. See [`verifyCallback`](#gatewayverifycallbackcallbackparams).
 - **The logger `sink` receives one string per call** (prefix, level, time, message and error stack), so pino and winston keep the whole message.
 
+### Kits
+
+The SDK is organised in kits, one per way of working with CMI:
+
+| Kit | What it does | Import from |
+|---|---|---|
+| **Standard kit** | Redirects the customer to CMI's payment page with a signed form, and handles CMI's callback | `cmi-node/standard` |
+| **API kit** | Back-office operations through CMI's XML API (capture, refund, void, order status) | `cmi-node/api` |
+| **Tokenization kit** | Payments with a registered card | coming soon |
+
+`cmi-node` itself re-exports every kit, so `import { CMIPaymentGateway } from 'cmi-node'` works as well.
+
 ### Subpath Imports (Recommended)
 
 For optimal bundle size, import framework adapters from their dedicated subpath:
 
 ```typescript
-// Core — always available
-import { CMIPaymentGateway } from 'cmi-node';
+// Standard kit
+import { CMIPaymentGateway } from 'cmi-node/standard';   // or from 'cmi-node'
 
 // Framework adapters — import only what you need
-import { createExpressMiddleware } from 'cmi-node/express';
-import { createNextJsHandler, createNextJsAppRouterHandler, handleNextJsCallback } from 'cmi-node/nextjs';
-import { createFastifyHandler } from 'cmi-node/fastify';
-import { createHonoHandler } from 'cmi-node/hono';
-import { NestJSCallbackHandler } from 'cmi-node/nestjs';
+import { createExpressMiddleware } from 'cmi-node/standard/express';   // or 'cmi-node/express'
+import { createNextJsHandler, createNextJsAppRouterHandler, handleNextJsCallback } from 'cmi-node/standard/nextjs';
+import { createFastifyHandler } from 'cmi-node/standard/fastify';
+import { createHonoHandler } from 'cmi-node/standard/hono';
+import { NestJSCallbackHandler } from 'cmi-node/standard/nestjs';
 ```
 
-> **Note:** All adapters are also re-exported from the main `'cmi-node'` entry for convenience, but using subpath imports avoids loading adapters you don't need.
+> **Note:** The shorter paths (`cmi-node/express`, `cmi-node/nextjs`, `cmi-node/fastify`, `cmi-node/hono`, `cmi-node/nestjs`) are the same files and keep working. All adapters are also re-exported from the main `'cmi-node'` entry, but subpath imports avoid loading adapters you don't need.
 
 ---
 
@@ -1028,9 +1040,9 @@ A class-based wrapper for NestJS that wraps `CallbackHandler` for use with the D
 
 ---
 
-## 🏦 Back-office API (capture, refund, void, order status)
+## 🏦 API kit: back-office operations (capture, refund, void, order status)
 
-`CMIApiClient` calls CMI's XML API from your server to manage orders after the payment page:
+`CMIApiClient` (from `cmi-node/api`, or `cmi-node`) calls CMI's XML API from your server to manage orders after the payment page:
 
 | Method | CMI operation | Use it to |
 |---|---|---|
@@ -1043,7 +1055,7 @@ A class-based wrapper for NestJS that wraps `CallbackHandler` for use with the D
 It needs an **API user** (a name and password created for API access in CMI's back office) and the API URL, both given by CMI. It does not use the `storeKey`.
 
 ```ts
-import { CMIApiClient, CMIApiError } from 'cmi-node';
+import { CMIApiClient, CMIApiError } from 'cmi-node/api';
 
 const api = new CMIApiClient({
   apiUrl: process.env.CMI_API_URL!,       // https:// only (http allowed for localhost)
@@ -1085,9 +1097,9 @@ if (status.found && status.transaction?.shipmentPossible) {
 | `processing` | NW | no | **yes**: query again (CMI suggests every 5 min) |
 | `error` / `cancelled` | ERR / CNCL | no | no (recurring orders) |
 
-**Errors.** `CMIApiError` is thrown only when no usable answer came back: `code` is `TIMEOUT`, `NETWORK`, `HTTP_STATUS` or `INVALID_RESPONSE`. The client never retries by itself.
+**Errors.** `CMIApiError` is thrown only when no usable answer came back: `code` is `TIMEOUT` (no complete answer within `timeoutMs`, including an answer that stopped halfway), `NETWORK`, `HTTP_STATUS` or `INVALID_RESPONSE`. The client never retries by itself. Wrong settings (an `http://` URL, an empty or too long value, a control character in the credentials, a currency without an amount) are rejected with a plain `Error` before anything is sent.
 
-> **After a timeout, check before retrying.** CMI may have captured, refunded or voided the order even though the answer was lost. Call `orderStatus()` (or `orderHistory()` for refunds) before sending the same capture or refund again, or the money may move twice.
+> **After any `CMIApiError` on a capture, refund or void, check before retrying.** The request may have reached CMI even though no usable answer came back, whatever the error code. Call `orderStatus()` (or `orderHistory()` for refunds) before sending the same capture or refund again, or the money may move twice.
 
 **Security.** The password is kept in a private field and never logged, serialized or included in error messages; redirects are refused so the credentials are never resent elsewhere. Keep `CMI_API_PASSWORD` in your server environment like the storeKey.
 

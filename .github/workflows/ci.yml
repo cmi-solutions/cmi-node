@@ -172,7 +172,7 @@ jobs:
       - name: Adapter tests on the lowest supported Hono (4.0.0)
         run: |
           npm install --no-save hono@4.0.0
-          npx tsx --test test/adapters.integration.test.ts
+          npx tsx --test test/standard/adapters.integration.test.ts
 
   # ─────────────────────────────────────────────────────────────
   # JOB — Secret scan of the full git history (gitleaks)
