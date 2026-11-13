@@ -154,7 +154,7 @@
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "prepublishOnly": "npm run clean && npm run type-check && npm run test && npm run build",
-    "test": "tsx --test test/accountType.test.ts test/gateway.test.ts test/php-parity.test.ts test/review-fixes.test.ts test/secret-leakage.test.ts test/pre-release.test.ts test/adapters.integration.test.ts",
+    "test": "tsx --test test/accountType.test.ts test/gateway.test.ts test/php-parity.test.ts test/review-fixes.test.ts test/secret-leakage.test.ts test/pre-release.test.ts test/adapters.integration.test.ts test/api-client.test.ts",
     "test:coverage": "c8 --check-coverage --lines 92 --branches 86 tsx --test \"test/**/*.test.ts\"",
     "lint": "eslint src",
     "format": "prettier --write \"src/**/*.ts\"",

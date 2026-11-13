@@ -41,6 +41,23 @@ export {
 // - PHP_CLEANED_BILLING_FIELDS, etc.: Internal field definitions
 // =============================================================================
 
+// Back-office API (CC5 XML): capture, refund, void, order status and history
+export { CMIApiClient, CMIApiError } from './api';
+export type {
+  CMIApiErrorCode,
+  CMIApiConfig,
+  CMIApiResponse,
+  CMITransactionResult,
+  CMIOrderStatus,
+  CMIOrderTransaction,
+  CMIOrderStatusResult,
+  CMIOrderHistoryEntry,
+  CMIOrderHistoryResult,
+  CMIPostAuthRequest,
+  CMIRefundRequest,
+  CMIVoidRequest,
+} from './api';
+
 // Logger exports
 export { logger, configureLogger, resetLogger } from './logger';
 export type { LogLevel, LoggerConfig, LogSink } from './logger';

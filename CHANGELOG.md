@@ -5,7 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - planned as 2.0.0
+## [Unreleased] - planned as 2.1.0
+
+### Added
+- `CMIApiClient`, a client for CMI's back-office XML API (CC5): `postAuth()` (full or
+  partial capture), `refund()` (full or partial), `void()`, `orderStatus()` and
+  `orderHistory()`. It uses an API user (name and password), not the storeKey, keeps the
+  password in a private field, refuses redirects and plain http (except localhost), and
+  never retries on its own. A declined operation is a result with `approved: false`;
+  `CMIApiError` (`TIMEOUT`, `NETWORK`, `HTTP_STATUS`, `INVALID_RESPONSE`) means no usable
+  answer came back. No new dependency: the XML is built and read by the SDK itself.
+
+## [2.0.0] - 2026-11-13
 
 ### Breaking changes
 - Requires Node.js 22.12 or newer (Node 18 and 20 are end of life).
