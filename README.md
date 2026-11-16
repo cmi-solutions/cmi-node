@@ -286,9 +286,6 @@ if (status.found && status.transaction?.shipmentPossible) {
 | `captured` / `settled` | C / S | **yes** | no |
 | `refunded` | C or S on a refund line | no | no |
 | `voided` / `declined` | V / D | no | no |
-| `pending` | PN | no | **yes**, for up to 72 h |
-| `reversal_required` | R | no | **yes**, until end of day |
-| `processing` | NW | no | **yes**, CMI suggests every 5 min |
 | `error` / `cancelled` | ERR / CNCL | no | no (recurring orders) |
 
 **Errors.** `CMIApiError` means no usable answer came back: `code` is `TIMEOUT`, `NETWORK`, `HTTP_STATUS` or `INVALID_RESPONSE`. The client never retries by itself. Wrong settings (an `http://` URL, a missing or too long value, a control character in the credentials, a currency without an amount) throw a plain `Error` before anything is sent.
