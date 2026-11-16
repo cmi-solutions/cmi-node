@@ -21,6 +21,24 @@
       ],
       "nestjs": [
         "./dist/adapters/nestjs.d.ts"
+      ],
+      "standard": [
+        "./dist/standard.d.ts"
+      ],
+      "standard/express": [
+        "./dist/adapters/express.d.ts"
+      ],
+      "standard/nextjs": [
+        "./dist/adapters/nextjs.d.ts"
+      ],
+      "standard/fastify": [
+        "./dist/adapters/fastify.d.ts"
+      ],
+      "standard/hono": [
+        "./dist/adapters/hono.d.ts"
+      ],
+      "standard/nestjs": [
+        "./dist/adapters/nestjs.d.ts"
       ]
     }
   },
