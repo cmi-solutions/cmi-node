@@ -10,11 +10,15 @@ export default defineConfig({
         // e.g.  import { createExpressMiddleware } from 'cmi-node/express'
         // Note: the core (CMIPaymentGateway) uses Node.js 'crypto' and Buffer, so edge
         // runtimes need Node.js compatibility (e.g. Cloudflare Workers: nodejs_compat).
-        'adapters/express':  'src/middleware/express.middleware.ts',
-        'adapters/nextjs':   'src/middleware/nextjs.helper.ts',
-        'adapters/fastify':  'src/middleware/fastify.helper.ts',
-        'adapters/hono':     'src/middleware/hono.helper.ts',
-        'adapters/nestjs':   'src/middleware/nestjs.helper.ts',
+        // Standard kit (hosted payment page): cmi-node/standard
+        standard:            'src/kits/standard/index.ts',
+        // API kit (back-office XML API): cmi-node/api
+        api:                 'src/kits/api/index.ts',
+        'adapters/express':  'src/kits/standard/adapters/express.middleware.ts',
+        'adapters/nextjs':   'src/kits/standard/adapters/nextjs.helper.ts',
+        'adapters/fastify':  'src/kits/standard/adapters/fastify.helper.ts',
+        'adapters/hono':     'src/kits/standard/adapters/hono.helper.ts',
+        'adapters/nestjs':   'src/kits/standard/adapters/nestjs.helper.ts',
     },
     format: ['cjs', 'esm'],
     dts: true,
