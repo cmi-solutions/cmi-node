@@ -34,17 +34,52 @@ Thank you for considering contributing to `cmi-node`! This document outlines the
 
 ## Project Structure
 
+The SDK is split into **kits** (one per way of working with CMI) on top of a **shared** layer:
+
 ```
 src/
-├── core/           # Gateway, Builder, Verifier, Form, Handler
-├── constants/      # Field definitions, currencies, languages, account types
-├── logger/         # Environment-aware logger
-├── middleware/      # Framework adapters (Express, NestJS, Next.js, Fastify, Hono)
-├── types/          # TypeScript type definitions
-├── utils/          # Hash, sanitization, formatter, crypto utilities
-├── validators/     # Config + payment validation
-└── index.ts        # Public API barrel export
+├── shared/                   # Used by every kit; knows nothing about kits
+│   ├── constants/            #   currencies, languages
+│   ├── formatting/           #   amount rounding (half-up to the cent)
+│   ├── logger/               #   environment-aware logger
+│   ├── security/             #   SecretString, timing-safe compare, browser guard
+│   └── validation/           #   base validator (https-only URLs, e-mail, phone...)
+├── kits/
+│   └── standard/             # Standard kit: hosted payment page (cmi-node/standard)
+│       ├── CMIPaymentGateway.ts
+│       ├── adapters/         #   Express, Next.js, Fastify, Hono, NestJS
+│       ├── callback/         #   CallbackVerifier, CallbackHandler
+│       ├── constants/        #   store types, tran types, confirmation modes, fields
+│       ├── hash/             #   ver3 hash, PHP-compatible sorting
+│       ├── payment/          #   PaymentBuilder, FormGenerator
+│       ├── types/
+│       ├── utils/            #   formatter, sanitization, generator, storeKey checks
+│       ├── validators/       #   config and payment validation
+│       └── index.ts          #   the kit's public API
+├── browser.ts                # What bundlers load for browser code: throws at once
+└── index.ts                  # Root entry: re-exports every kit
+test/
+└── standard/                 # One test folder per kit (and test/shared for shared code)
 ```
+
+The API kit (`src/kits/api`) and the Tokenization kit (`src/kits/tokenization`) will follow the same layout.
+
+### Architecture rules
+
+These keep the kits independent. ESLint enforces the first two, so a wrong import fails `npm run lint` and CI:
+
+1. **A kit imports only from itself and from `src/shared`**, never from another kit.
+2. **`src/shared` never imports from a kit.**
+3. **Code two kits need moves to `src/shared`.** Don't copy it, and don't import it across kits.
+4. **Each kit owns its configuration and secrets.** The Standard kit takes the `storeKey`; another kit never receives it.
+5. **Each kit has one public entry point** (`src/kits/<kit>/index.ts`), published as `cmi-node/<kit>` and re-exported by `src/index.ts`. Anything not exported there is internal.
+6. **Published import paths never change in a minor version.** Keep the old paths working when files move.
+
+### Adding a kit
+
+1. Create `src/kits/<kit>/` with an `index.ts` listing its public API.
+2. Add it to the ESLint kit list in `eslint.config.mjs`, a `@<kit>/*` alias in `tsconfig.json`, an entry in `tsup.config.ts`, and a `./<kit>` subpath in the `exports` of `package.json`.
+3. Re-export it from `src/index.ts`, and put its tests in `test/<kit>/`.
 
 ---
 
@@ -203,7 +238,7 @@ These hooks are installed automatically when you run `npm install` (via the `pre
 - Use TypeScript strict mode — no `any` without an explicit comment justifying it
 - Keep runtime dependencies at **zero** — use only Node.js built-ins (`crypto`, `buffer`)
 - All field names are normalized case-insensitively — follow the canonical casing in the codebase
-- Use path aliases (`@core`, `@types`, `@utils`, `@validators`, `@constants`, `@logger`) for imports
+- Use path aliases for imports that leave the current folder: `@shared/...` for shared code, `@standard/...` inside the Standard kit; use `./` for files in the same folder
 
 ---
 

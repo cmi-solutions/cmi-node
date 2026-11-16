@@ -5,7 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - planned as 2.0.0
+## [Unreleased] - planned as 2.1.0
+
+### Changed
+- The sources are organised in kits: the hosted payment page code is the **Standard kit**
+  (`src/kits/standard`), and code used by every kit is in `src/shared`. ESLint rejects
+  imports between kits. Nothing changes for users: every import path and every exported
+  name and type is the same as in 2.0.0.
+
+### Added
+- `cmi-node/standard` and `cmi-node/standard/{express,nextjs,fastify,hono,nestjs}` import
+  paths for the Standard kit. The existing paths (`cmi-node`, `cmi-node/express`, ...) keep
+  working and give the same exports.
+
+## [2.0.0] - 2026-11-13
 
 ### Breaking changes
 - Requires Node.js 22.12 or newer (Node 18 and 20 are end of life).
