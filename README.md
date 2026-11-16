@@ -360,7 +360,7 @@ npm run lint
 npm run check:pack     # no secrets or forbidden files in the npm tarball (after build)
 ```
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for the project structure, the kit rules and the commit conventions, and [SECURITY.md](./SECURITY.md) to report a vulnerability.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the project structure, the kit rules and the commit conventions.
 
 ## License
 
