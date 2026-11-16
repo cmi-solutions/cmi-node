@@ -35,6 +35,12 @@
       ],
       "@standard/*": [
         "./src/kits/standard/*"
+      ],
+      "@api": [
+        "./src/kits/api"
+      ],
+      "@api/*": [
+        "./src/kits/api/*"
       ]
     },
   },

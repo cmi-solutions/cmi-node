@@ -12,6 +12,8 @@ export default defineConfig({
         // runtimes need Node.js compatibility (e.g. Cloudflare Workers: nodejs_compat).
         // Standard kit (hosted payment page): cmi-node/standard
         standard:            'src/kits/standard/index.ts',
+        // API kit (back-office XML API): cmi-node/api
+        api:                 'src/kits/api/index.ts',
         'adapters/express':  'src/kits/standard/adapters/express.middleware.ts',
         'adapters/nextjs':   'src/kits/standard/adapters/nextjs.helper.ts',
         'adapters/fastify':  'src/kits/standard/adapters/fastify.helper.ts',

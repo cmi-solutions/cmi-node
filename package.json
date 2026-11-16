@@ -25,6 +25,9 @@
       "standard": [
         "./dist/standard.d.ts"
       ],
+      "api": [
+        "./dist/api.d.ts"
+      ],
       "standard/express": [
         "./dist/adapters/express.d.ts"
       ],
@@ -84,6 +87,25 @@
       "require": {
         "types": "./dist/standard.d.cts",
         "default": "./dist/standard.cjs"
+      }
+    },
+    "./api": {
+      "workerd": {
+        "types": "./dist/api.d.ts",
+        "default": "./dist/api.js"
+      },
+      "worker": {
+        "types": "./dist/api.d.ts",
+        "default": "./dist/api.js"
+      },
+      "browser": "./dist/browser.js",
+      "import": {
+        "types": "./dist/api.d.ts",
+        "default": "./dist/api.js"
+      },
+      "require": {
+        "types": "./dist/api.d.cts",
+        "default": "./dist/api.cjs"
       }
     },
     "./express": {
@@ -286,7 +308,7 @@
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "prepublishOnly": "npm run clean && npm run type-check && npm run test && npm run build",
-    "test": "tsx --test test/standard/accountType.test.ts test/standard/gateway.test.ts test/standard/php-parity.test.ts test/standard/review-fixes.test.ts test/standard/secret-leakage.test.ts test/standard/pre-release.test.ts test/standard/adapters.integration.test.ts",
+    "test": "tsx --test test/standard/accountType.test.ts test/standard/gateway.test.ts test/standard/php-parity.test.ts test/standard/review-fixes.test.ts test/standard/secret-leakage.test.ts test/standard/pre-release.test.ts test/standard/adapters.integration.test.ts test/shared/cc5.test.ts test/api/api-client.test.ts",
     "test:coverage": "c8 --check-coverage --lines 92 --branches 86 tsx --test \"test/**/*.test.ts\"",
     "lint": "eslint src",
     "format": "prettier --write \"src/**/*.ts\"",

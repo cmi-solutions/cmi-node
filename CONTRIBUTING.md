@@ -39,12 +39,18 @@ The SDK is split into **kits** (one per way of working with CMI) on top of a **s
 ```
 src/
 ├── shared/                   # Used by every kit; knows nothing about kits
+│   ├── cc5/                  #   CMI's XML API: request builder, response reader, HTTP transport, CMIApiError
 │   ├── constants/            #   currencies, languages
 │   ├── formatting/           #   amount rounding (half-up to the cent)
 │   ├── logger/               #   environment-aware logger
 │   ├── security/             #   SecretString, timing-safe compare, browser guard
 │   └── validation/           #   base validator (https-only URLs, e-mail, phone...)
 ├── kits/
+│   ├── api/                  # API kit: back-office XML API (cmi-node/api)
+│   │   ├── CMIApiClient.ts   #   postAuth, refund, void, orderStatus, orderHistory
+│   │   ├── order-status.ts   #   CMI's status table, history lines
+│   │   ├── api.types.ts
+│   │   └── index.ts          #   the kit's public API
 │   └── standard/             # Standard kit: hosted payment page (cmi-node/standard)
 │       ├── CMIPaymentGateway.ts
 │       ├── adapters/         #   Express, Next.js, Fastify, Hono, NestJS
@@ -59,10 +65,12 @@ src/
 ├── browser.ts                # What bundlers load for browser code: throws at once
 └── index.ts                  # Root entry: re-exports every kit
 test/
-└── standard/                 # One test folder per kit (and test/shared for shared code)
+├── api/                      # One test folder per kit...
+├── shared/                   # ...and one for shared code
+└── standard/
 ```
 
-The API kit (`src/kits/api`) and the Tokenization kit (`src/kits/tokenization`) will follow the same layout.
+The Tokenization kit (`src/kits/tokenization`) will follow the same layout and reuse `src/shared/cc5` for its API calls.
 
 ### Architecture rules
 
